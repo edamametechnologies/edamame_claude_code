@@ -1,0 +1,135 @@
+on:
+  push:
+    branches: [ dev, main ]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+name: Plugin install and unit tests
+
+permissions: read-all
+
+jobs:
+  test:
+    name: Install and test
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Setup EDAMAME Posture
+        uses: edamametechnologies/edamame_posture_action@v1
+        with:
+          edamame_user: ${{ vars.EDAMAME_POSTURE_USER }}
+          edamame_domain: ${{ vars.EDAMAME_POSTURE_DOMAIN }}
+          edamame_pin: ${{ secrets.EDAMAME_POSTURE_PIN }}
+          edamame_id: ${{ github.run_id }}
+          checkout: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Claude Code
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
+
+      - name: Validate plugin manifest
+        run: |
+          echo "--- Validating plugin manifest ---"
+          test -f .claude-plugin/plugin.json || { echo "FAIL: .claude-plugin/plugin.json not found"; exit 1; }
+          test -f .mcp.json || { echo "FAIL: .mcp.json not found"; exit 1; }
+          node -e "
+            const m = JSON.parse(require('fs').readFileSync('.claude-plugin/plugin.json', 'utf8'));
+            console.log('Plugin name:', m.name);
+            console.log('Plugin version:', m.version);
+            console.log('MCP servers ref:', m.mcpServers);
+            if (!m.name) { console.error('FAIL: missing name'); process.exit(1); }
+            if (m.mcpServers !== './.mcp.json') { console.error('FAIL: mcpServers should reference ./.mcp.json'); process.exit(1); }
+          "
+          echo "--- Plugin manifest valid ---"
+
+      - name: Validate with Claude Code CLI
+        run: |
+          echo "--- Running Claude Code plugin validate ---"
+          claude plugin validate . || { echo "FAIL: claude plugin validate failed"; exit 1; }
+          echo "--- Claude Code validation passed ---"
+
+      - name: Verify plugin structure
+        run: |
+          echo "--- Checking plugin file structure ---"
+          for f in \
+            bridge/claude_code_edamame_mcp.mjs \
+            bridge/edamame_client.mjs \
+            bridge/control_center_app.html \
+            adapters/session_prediction_adapter.mjs \
+            service/claude_code_extrapolator.mjs \
+            service/control_center.mjs \
+            service/health.mjs \
+            service/config.mjs \
+            setup/install.sh \
+            setup/healthcheck.sh \
+            skills/security-posture/SKILL.md \
+            skills/divergence-monitor/SKILL.md \
+            agents/security-monitor.md \
+            commands/healthcheck.md; do
+            test -f "$f" || { echo "FAIL: $f not found"; exit 1; }
+            echo "  OK: $f"
+          done
+          echo "--- Plugin structure valid ---"
+
+      - name: Install plugin via marketplace
+        run: |
+          echo "--- Adding marketplace and installing plugin ---"
+          claude plugin marketplace add edamametechnologies/edamame_claude_code
+          claude plugin install edamame@edamame-security
+          echo "--- Plugin installed ---"
+
+          echo "--- Verifying plugin is enabled ---"
+          cat ~/.claude/settings.json
+          node -e "
+            const s = JSON.parse(require('fs').readFileSync(require('os').homedir() + '/.claude/settings.json', 'utf8'));
+            if (!s.enabledPlugins || !s.enabledPlugins['edamame@edamame-security']) {
+              console.error('FAIL: plugin not found in enabledPlugins');
+              process.exit(1);
+            }
+            console.log('Plugin enabled in settings.json');
+          "
+
+      - name: Verify plugin loads in Claude Code
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo "--- Verifying plugin MCP tools load in Claude Code ---"
+          TOOLS=$(echo "list all MCP tool names from the edamame plugin, output only the tool names one per line, nothing else" \
+            | claude -p --dangerously-skip-permissions 2>&1)
+          echo "$TOOLS"
+          echo "$TOOLS" | grep -q "edamame_claude_code_control_center" || { echo "FAIL: control center tool not found"; exit 1; }
+          echo "--- Plugin MCP tools verified ---"
+
+      - name: Run manual install
+        run: |
+          echo "--- Running manual install ---"
+          bash setup/install.sh "$PWD"
+          echo "--- Manual install completed ---"
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Verify MCP bridge exports
+        run: |
+          echo "--- Verifying MCP bridge module exports ---"
+          node -e "
+            import('../bridge/claude_code_edamame_mcp.mjs').then(m => {
+              const fns = ['handleRequest', 'tryExtractMessages', 'createBackgroundRefreshLoop', 'createClaudeCodeDrivenRefresh'];
+              for (const fn of fns) {
+                if (typeof m[fn] !== 'function') { console.error('FAIL: missing export ' + fn); process.exit(1); }
+                console.log('  OK: ' + fn);
+              }
+              console.log('Bridge exports check passed');
+            });
+          "
+          echo "--- MCP bridge verification complete ---"
