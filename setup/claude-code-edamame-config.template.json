@@ -1,6 +1,6 @@
 {
   "workspace_root": "__WORKSPACE_ROOT__",
-  "claude_projects_root": "~/.claude/projects",
+  "claude_code_projects_root": "~/.claude/projects",
   "agent_type": "claude_code",
   "agent_instance_id": "__DEFAULT_AGENT_INSTANCE_ID__",
   "transcript_project_hints": [
@@ -19,10 +19,29 @@
   "verdict_history_limit": 10,
   "claude_code_llm_hosts": [
     "api.anthropic.com:443",
-    "api.openai.com:443"
+    "api.openai.com:443",
+    "amazonaws.com:443",
+    "asn:CLOUDFLARENET",
+    "asn:NOTION",
+    "asn:MICROSOFT-CORP"
   ],
   "scope_parent_paths": [
     "*/claude",
+    "*/claude-code",
+    "*/bin/claude",
+    "*/node",
+    "*/node_modules/.bin/claude",
+    "*/Claude.app/Contents/MacOS/Claude",
+    "*/Claude.app/Contents/MacOS/*",
+    "*/Claude/Claude.exe",
+    "*/Claude.exe",
+    "*/WindowsApps/Claude*",
+    "*/Program Files/WindowsApps/Claude*",
+    "*/node.exe",
+    "/opt/claude*",
+    "*/.local/share/claude*",
+    "*/.local/bin/claude",
     "*/claude_code_edamame_mcp.mjs"
-  ]
+  ],
+  "scope_grandparent_paths": []
 }

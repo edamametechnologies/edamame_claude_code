@@ -102,12 +102,25 @@ export const DEFAULT_CONFIG = Object.freeze({
   ],
   scopeProcessPaths: [],
   scopeParentPaths: [
-    // Claude Code CLI process
+    // Claude Code CLI (macOS/Linux: native installer, Homebrew, npm)
     "*/claude",
     "*/claude-code",
-    // Node.js (Claude Code runs as a Node process)
+    "*/bin/claude",
     "*/node",
     "*/node_modules/.bin/claude",
+    // Claude Code Desktop app (macOS .app bundle)
+    "*/Claude.app/Contents/MacOS/Claude",
+    "*/Claude.app/Contents/MacOS/*",
+    // Claude Code Desktop app (Windows: Programs, WindowsApps, MSIX)
+    "*/Claude/Claude.exe",
+    "*/Claude.exe",
+    "*/WindowsApps/Claude*",
+    "*/Program Files/WindowsApps/Claude*",
+    "*/node.exe",
+    // Claude Code Desktop app (Linux: /opt, .local)
+    "/opt/claude*",
+    "*/.local/share/claude*",
+    "*/.local/bin/claude",
     // MCP bridge script spawned by the Claude Code package
     "*/claude_code_edamame_mcp.mjs",
   ],

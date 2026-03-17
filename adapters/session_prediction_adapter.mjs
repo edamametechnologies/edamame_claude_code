@@ -14,11 +14,20 @@ const SENSITIVE_PATH_PATTERNS = [
   "~/.docker/config.json",
   "~/.npmrc",
   "~/.netrc",
+  // macOS browser data
   "~/Library/Application Support/Google/Chrome/*",
   "~/Library/Application Support/Chromium/*",
   "~/Library/Application Support/Firefox/*",
   "~/Library/Application Support/BraveSoftware/*",
+  // Windows browser data
   "~/AppData/Local/Google/Chrome/*",
+  "~/AppData/Local/Chromium/*",
+  "~/AppData/Local/Mozilla/Firefox/*",
+  "~/AppData/Local/BraveSoftware/*",
+  // Linux browser data
+  "~/.config/google-chrome/*",
+  "~/.config/chromium/*",
+  "~/.mozilla/firefox/*",
 ];
 
 const PATH_LIKE_REGEX = /(?:file:\/\/\/[^\s"'`)>]+|~\/[^\s"'`)>]+|\/[^\s"'`)>]+|[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.@-]+)+(?:\.[A-Za-z0-9_-]+)?)/g;

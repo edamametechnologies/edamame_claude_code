@@ -111,6 +111,7 @@ bash setup/healthcheck.sh --strict --json
 | `setup/` | Install, bundle, and health-check scripts plus config templates |
 | `prompts/` | Prompt contract used by EDAMAME-side raw-session ingest |
 | `docs/` | Architecture, setup, operator guidance |
+| `demo/` | Demo trigger scripts for divergence and CVE detection validation |
 
 ## Distribution Channels
 
