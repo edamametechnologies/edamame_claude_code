@@ -17,6 +17,5 @@
     "developer-workstation",
     "mcp",
     "edamame"
-  ],
-  "mcpServers": ".mcp.json"
+  ]
 }
