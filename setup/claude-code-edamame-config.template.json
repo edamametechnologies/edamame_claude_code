@@ -1,0 +1,28 @@
+{
+  "workspace_root": "__WORKSPACE_ROOT__",
+  "claude_projects_root": "~/.claude/projects",
+  "agent_type": "claude_code",
+  "agent_instance_id": "__DEFAULT_AGENT_INSTANCE_ID__",
+  "transcript_project_hints": [
+    "__WORKSPACE_BASENAME__",
+    "edamame-code-workspace"
+  ],
+  "transcript_limit": 6,
+  "transcript_recency_hours": 48,
+  "transcript_active_window_minutes": 5,
+  "state_dir": "__STATE_DIR__",
+  "host_kind": "__DEFAULT_HOST_KIND__",
+  "posture_cli_command": "__DEFAULT_POSTURE_CLI_COMMAND__",
+  "edamame_mcp_endpoint": "http://127.0.0.1:3000/mcp",
+  "edamame_mcp_psk_file": "__EDAMAME_MCP_PSK_FILE__",
+  "divergence_interval_secs": 120,
+  "verdict_history_limit": 10,
+  "claude_code_llm_hosts": [
+    "api.anthropic.com:443",
+    "api.openai.com:443"
+  ],
+  "scope_parent_paths": [
+    "*/claude",
+    "*/claude_code_edamame_mcp.mjs"
+  ]
+}

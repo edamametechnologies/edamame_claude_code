@@ -1,0 +1,32 @@
+{
+  "name": "edamame",
+  "version": "1.0.0",
+  "description": "EDAMAME Security plugin for Claude Code - runtime behavioral monitoring",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "bin": {
+    "edamame-mcp": "./bridge/claude_code_edamame_mcp.mjs",
+    "edamame-healthcheck": "./service/healthcheck_cli.mjs",
+    "edamame-extrapolator": "./service/claude_code_extrapolator.mjs",
+    "edamame-verdict-reader": "./service/verdict_reader.mjs"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/edamametechnologies/edamame_claude_code.git"
+  },
+  "author": "EDAMAME Technologies <info@edamame.tech>",
+  "license": "Apache-2.0",
+  "keywords": [
+    "edamame",
+    "security",
+    "claude-code",
+    "mcp",
+    "behavioral-monitoring",
+    "divergence-detection"
+  ]
+}
