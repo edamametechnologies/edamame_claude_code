@@ -123,14 +123,14 @@ jobs:
         run: |
           echo "--- Verifying MCP bridge module exports ---"
           node -e "
-            import('../bridge/claude_code_edamame_mcp.mjs').then(m => {
+            import('./bridge/claude_code_edamame_mcp.mjs').then(m => {
               const fns = ['handleRequest', 'tryExtractMessages', 'createBackgroundRefreshLoop', 'createClaudeCodeDrivenRefresh'];
               for (const fn of fns) {
                 if (typeof m[fn] !== 'function') { console.error('FAIL: missing export ' + fn); process.exit(1); }
                 console.log('  OK: ' + fn);
               }
               console.log('Bridge exports check passed');
-            });
+            }).catch(e => { console.error('FAIL:', e.message); process.exit(1); });
           "
           echo "--- MCP bridge verification complete ---"
 
