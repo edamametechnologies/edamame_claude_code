@@ -3,3 +3,4 @@ dist/
 *.log
 *.err
 .DS_Store
+__pycache__/
