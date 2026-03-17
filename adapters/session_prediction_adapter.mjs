@@ -81,11 +81,11 @@ async function walkFiles(rootDir, results = []) {
   for (const entry of entries) {
     const fullPath = path.join(rootDir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === "subagents") continue;
+      if (entry.name === "subagents" || entry.name === "tool-results") continue;
       await walkFiles(fullPath, results);
       continue;
     }
-    if ((entry.name.endsWith(".txt") || entry.name.endsWith(".jsonl")) && fullPath.includes("agent-transcripts")) {
+    if (entry.name.endsWith(".jsonl") || entry.name.endsWith(".txt")) {
       results.push(fullPath);
     }
   }

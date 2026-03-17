@@ -104,7 +104,7 @@ async function makeBridgeFixture(options = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "claude-code-edamame-bridge-"));
   const workspaceRoot = path.join(root, "edamame_project");
   const claudeProjectsRoot = path.join(root, "claude-projects");
-  const transcriptDir = path.join(claudeProjectsRoot, "fixture-workspace", "agent-transcripts");
+  const transcriptDir = path.join(claudeProjectsRoot, "fixture-workspace");
   const configPath = path.join(root, "config.json");
   const pskPath = path.join(root, ".edamame_psk");
   const hostKind = options.hostKind || "edamame_app";
@@ -189,6 +189,26 @@ Only inspect ${workspaceRoot}/src/lib.rs
     postureFixture,
     systemctlFixture,
   };
+}
+
+async function runScript(command, args, options = {}) {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", reject);
+    child.on("close", (code) => resolve({ code, stdout, stderr }));
+  });
 }
 
 async function withMockMcpAuthServer(handler) {
@@ -438,6 +458,660 @@ test("claude-code-driven refresh skips recent persisted runs", async () => {
   assert.equal(result.reason, "recent_persisted");
 });
 
+test("handleRequest serves the control-center app resource", async () => {
+  const config = await makeBridgeFixture();
+
+  const resourcesResponse = await handleRequest(config, {
+    jsonrpc: "2.0",
+    id: 8,
+    method: "resources/read",
+    params: {
+      uri: "ui://edamame/control-center.html",
+    },
+  });
+
+  assert.equal(resourcesResponse.result.contents[0].mimeType, "text/html;profile=mcp-app");
+  assert.match(resourcesResponse.result.contents[0].text, /Claude Code EDAMAME Control Center/);
+});
+
+test("healthcheck flags posture system service when expected but not ready", async () => {
+  const config = await makeBridgeFixture({
+    hostKind: "edamame_posture",
+    withMockSystemctl: true,
+    mockSystemctlOptions: {
+      loadState: "loaded",
+      unitFileState: "disabled",
+      activeState: "inactive",
+    },
+    withMockSystemServiceFiles: false,
+  });
+
+  const result = await runHealthcheck(config, { strict: true });
+  const serviceCheck = result.checks.find((check) => check.name === "posture.system_service");
+
+  assert.equal(serviceCheck?.ok, false);
+  assert.equal(serviceCheck?.detail?.unitLoaded, true);
+  assert.equal(serviceCheck?.detail?.enabled, false);
+  assert.equal(serviceCheck?.detail?.active, false);
+  assert.equal(serviceCheck?.detail?.wrapperPresent, false);
+  assert.equal(serviceCheck?.detail?.configPresent, false);
+});
+
+test("bridge can dispatch the control center tool with structured content", async () => {
+  const config = await makeBridgeFixture();
+
+  const response = await handleRequest(config, {
+    jsonrpc: "2.0",
+    id: 9,
+    method: "tools/call",
+    params: {
+      name: "edamame_claude_code_control_center",
+      arguments: {},
+    },
+  });
+
+  assert.equal(typeof response.result.structuredContent.summaryLine, "string");
+  assert.equal(response.result.structuredContent.config.hostKind, "edamame_app");
+  assert.equal(response.result.structuredContent.pairing.configured, true);
+});
+
+test("legacy control center aliases are rejected", async () => {
+  const config = await makeBridgeFixture();
+
+  const dottedAliasResponse = await handleRequest(config, {
+    jsonrpc: "2.0",
+    id: 12,
+    method: "tools/call",
+    params: {
+      name: "edamame.claude_code_control_center",
+      arguments: {},
+    },
+  });
+
+  assert.equal(dottedAliasResponse.error.message, "unsupported_tool:edamame.claude_code_control_center");
+
+  const response = await handleRequest(config, {
+    jsonrpc: "2.0",
+    id: 13,
+    method: "tools/call",
+    params: {
+      name: "claude_code.control_center",
+      arguments: {},
+    },
+  });
+
+  assert.equal(response.error.message, "unsupported_tool:claude_code.control_center");
+});
+
+test("handleRequest uses Claude Code lifecycle refresh hooks", async () => {
+  const config = await makeBridgeFixture();
+  const calls = [];
+  const autoRefresh = {
+    kick: (trigger) => calls.push({ type: "kick", trigger }),
+    maybeRun: async (trigger) => {
+      calls.push({ type: "maybeRun", trigger });
+      return { skipped: true, reason: "test_skip" };
+    },
+  };
+
+  await handleRequest(
+    config,
+    {
+      jsonrpc: "2.0",
+      method: "notifications/initialized",
+    },
+    { autoRefresh },
+  );
+
+  await handleRequest(
+    config,
+    {
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tools/list",
+      params: {},
+    },
+    { autoRefresh },
+  );
+
+  await handleRequest(
+    config,
+    {
+      jsonrpc: "2.0",
+      id: 6,
+      method: "tools/call",
+      params: {
+        name: "claude_code.healthcheck",
+        arguments: { strict: false },
+      },
+    },
+    { autoRefresh },
+  );
+
+  assert.deepEqual(calls, [
+    { type: "kick", trigger: "notifications_initialized" },
+    { type: "kick", trigger: "tools_list" },
+    { type: "maybeRun", trigger: "tool_call:claude_code.healthcheck" },
+  ]);
+});
+
+test("handleRequest uses ping refresh hook", async () => {
+  const config = await makeBridgeFixture();
+  const calls = [];
+  const autoRefresh = {
+    kick: (trigger) => calls.push({ type: "kick", trigger }),
+    maybeRun: async () => ({ skipped: true, reason: "test_skip" }),
+  };
+
+  const response = await handleRequest(
+    config,
+    {
+      jsonrpc: "2.0",
+      id: 7,
+      method: "ping",
+    },
+    { autoRefresh },
+  );
+
+  assert.deepEqual(calls, [{ type: "kick", trigger: "ping" }]);
+  assert.deepEqual(response.result, {});
+});
+
+test("handleRequest skips lifecycle refresh for explicit refresh tool", async () => {
+  const config = await makeBridgeFixture();
+  let maybeRunCalled = false;
+  const autoRefresh = {
+    kick: () => {},
+    maybeRun: async () => {
+      maybeRunCalled = true;
+      return { skipped: false };
+    },
+  };
+
+  const response = await handleRequest(
+    config,
+    {
+      jsonrpc: "2.0",
+      id: 7,
+      method: "tools/call",
+      params: {
+        name: "claude_code.refresh_behavioral_model",
+        arguments: { dry_run: true },
+      },
+    },
+    { autoRefresh },
+  );
+
+  assert.equal(maybeRunCalled, false);
+  const payload = JSON.parse(response.result.content[0].text);
+  assert.deepEqual(payload.reasons, ["dry_run"]);
+});
+
+test("claude-code-driven refresh reruns when transcript changed after recent persisted run", async () => {
+  const now = Date.now();
+  let runExtrapolationCalls = 0;
+
+  const refresh = createClaudeCodeDrivenRefresh(
+    { divergenceIntervalSecs: 120 },
+    {
+      loadState: async () => ({
+        lastRunAt: new Date(now - 1_000).toISOString(),
+      }),
+      latestTranscriptMtimeMs: async () => now,
+      runExtrapolation: async () => {
+        runExtrapolationCalls += 1;
+        return {
+          success: true,
+          sessionCount: 1,
+          upserted: true,
+          reasons: ["transcript_updated"],
+        };
+      },
+      logRefresh: false,
+    },
+  );
+
+  const result = await refresh.maybeRun("ping");
+
+  assert.equal(runExtrapolationCalls, 1);
+  assert.equal(result.skipped, false);
+  assert.deepEqual(result.result?.reasons, ["transcript_updated"]);
+});
+
+test("runLatestExtrapolation skips unchanged payload when matching contributor is already remote", async () => {
+  const config = await makeBridgeFixture();
+  const invocations = [];
+  const savedStates = [];
+
+  const result = await runLatestExtrapolation(config, {
+    buildPayload: async () => ({
+      sessions: [{ sessionId: "session-stable" }],
+      rawSessions: {
+        agent_type: "claude_code",
+        agent_instance_id: "claude-code-bridge-test",
+        source_kind: "claude_code",
+        sessions: [{ session_key: "session-stable" }],
+      },
+      rawPayloadHash: "payload-123",
+    }),
+    loadState: async (_cfg, name) => {
+      assert.equal(name, "claude-code-extrapolator");
+      return {
+        lastPayloadHash: "payload-123",
+        lastWindowHash: "window-123",
+      };
+    },
+    saveState: async (_cfg, name, value) => {
+      assert.equal(name, "claude-code-extrapolator");
+      savedStates.push(value);
+    },
+    makeClient: async () => ({
+      invoke: async (toolName) => {
+        invocations.push(toolName);
+        if (toolName === "get_behavioral_model") {
+          return {
+            contributors: [
+              {
+                agent_type: "claude_code",
+                agent_instance_id: "claude-code-bridge-test",
+                hash: "window-123",
+              },
+            ],
+          };
+        }
+        throw new Error(`unexpected_tool:${toolName}`);
+      },
+    }),
+  });
+
+  assert.equal(result.upserted, false);
+  assert.deepEqual(result.reasons, ["payload_unchanged_remote_current"]);
+  assert.equal(result.windowHash, "window-123");
+  assert.equal(result.remoteContributorHash, "window-123");
+  assert.deepEqual(invocations, ["get_behavioral_model"]);
+  assert.equal(savedStates.length, 1);
+  assert.equal(savedStates[0].lastWindowHash, "window-123");
+});
+
+test("runLatestExtrapolation repushes unchanged payload when contributor is missing remotely", async () => {
+  const config = await makeBridgeFixture();
+  const invocations = [];
+  const savedStates = [];
+
+  const result = await runLatestExtrapolation(config, {
+    buildPayload: async () => ({
+      sessions: [{ sessionId: "session-stable" }],
+      rawSessions: {
+        agent_type: "claude_code",
+        agent_instance_id: "claude-code-bridge-test",
+        source_kind: "claude_code",
+        sessions: [{ session_key: "session-stable" }],
+      },
+      rawPayloadHash: "payload-123",
+    }),
+    loadState: async () => ({
+      lastPayloadHash: "payload-123",
+      lastWindowHash: "window-123",
+    }),
+    saveState: async (_cfg, _name, value) => {
+      savedStates.push(value);
+    },
+    makeClient: async () => ({
+      invoke: async (toolName) => {
+        invocations.push(toolName);
+        if (toolName === "get_behavioral_model") {
+          return { model: null };
+        }
+        if (toolName === "upsert_behavioral_model_from_raw_sessions") {
+          return {
+            window: {
+              hash: "window-456",
+              predictions: [],
+            },
+          };
+        }
+        if (toolName === "get_divergence_engine_status") {
+          return { running: true };
+        }
+        throw new Error(`unexpected_tool:${toolName}`);
+      },
+    }),
+  });
+
+  assert.equal(result.upserted, true);
+  assert.deepEqual(result.reasons, ["raw_ingest", "repush_remote_missing"]);
+  assert.equal(result.windowHash, "window-456");
+  assert.equal(result.remoteContributorHash, null);
+  assert.deepEqual(invocations, [
+    "get_behavioral_model",
+    "upsert_behavioral_model_from_raw_sessions",
+    "get_divergence_engine_status",
+  ]);
+  assert.equal(savedStates.length, 1);
+  assert.equal(savedStates[0].lastWindowHash, "window-456");
+});
+
+test("runLatestExtrapolation restores cached window when no active sessions remain", async () => {
+  const config = await makeBridgeFixture();
+  const invocations = [];
+  const cachedWindow = {
+    window_start: "2026-03-08T14:00:00.000Z",
+    window_end: "2026-03-08T14:05:00.000Z",
+    agent_type: "claude_code",
+    agent_instance_id: "claude-code-bridge-test",
+    predictions: [],
+    contributors: [
+      {
+        agent_type: "claude_code",
+        agent_instance_id: "claude-code-bridge-test",
+        prediction_count: 0,
+        hash: "window-cached",
+        window_start: "2026-03-08T14:00:00.000Z",
+        window_end: "2026-03-08T14:05:00.000Z",
+        ingested_at: "2026-03-08T14:05:00.000Z",
+      },
+    ],
+    version: "raw-session-llm/1",
+    hash: "window-cached",
+    ingested_at: "2026-03-08T14:05:00.000Z",
+  };
+  const savedStates = [];
+
+  const result = await runLatestExtrapolation(config, {
+    buildPayload: async () => ({
+      sessions: [],
+      rawSessions: {
+        agent_type: "claude_code",
+        agent_instance_id: "claude-code-bridge-test",
+        source_kind: "claude_code",
+        sessions: [],
+      },
+      rawPayloadHash: "payload-empty",
+    }),
+    loadState: async () => ({
+      lastPayloadHash: "payload-123",
+      lastWindowHash: "window-cached",
+      lastSessionIds: ["session-stable"],
+      lastGeneratedWindow: cachedWindow,
+    }),
+    saveState: async (_cfg, _name, value) => {
+      savedStates.push(value);
+    },
+    makeClient: async () => ({
+      invoke: async (toolName, args) => {
+        invocations.push(toolName);
+        if (toolName === "get_behavioral_model") {
+          return { model: null };
+        }
+        if (toolName === "upsert_behavioral_model") {
+          assert.equal(JSON.parse(args.window_json).hash, "window-cached");
+          return { success: true };
+        }
+        if (toolName === "get_divergence_engine_status") {
+          return { running: true };
+        }
+        throw new Error(`unexpected_tool:${toolName}`);
+      },
+    }),
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.upserted, true);
+  assert.equal(result.sessionCount, 0);
+  assert.equal(result.rawPayloadHash, "payload-123");
+  assert.equal(result.windowHash, "window-cached");
+  assert.deepEqual(result.reasons, [
+    "cached_window_repush_no_active_sessions",
+    "repush_remote_missing",
+  ]);
+  assert.deepEqual(invocations, [
+    "get_behavioral_model",
+    "upsert_behavioral_model",
+    "get_divergence_engine_status",
+  ]);
+  assert.equal(savedStates.length, 1);
+  assert.equal(savedStates[0].lastWindowHash, "window-cached");
+});
+
+test("runLatestExtrapolation skips cached recovery when remote contributor is still current", async () => {
+  const config = await makeBridgeFixture();
+  const invocations = [];
+  const cachedWindow = {
+    window_start: "2026-03-08T14:00:00.000Z",
+    window_end: "2026-03-08T14:05:00.000Z",
+    agent_type: "claude_code",
+    agent_instance_id: "claude-code-bridge-test",
+    predictions: [],
+    contributors: [],
+    version: "raw-session-llm/1",
+    hash: "window-cached",
+    ingested_at: "2026-03-08T14:05:00.000Z",
+  };
+  const savedStates = [];
+
+  const result = await runLatestExtrapolation(config, {
+    buildPayload: async () => ({
+      sessions: [],
+      rawSessions: {
+        agent_type: "claude_code",
+        agent_instance_id: "claude-code-bridge-test",
+        source_kind: "claude_code",
+        sessions: [],
+      },
+      rawPayloadHash: "payload-empty",
+    }),
+    loadState: async () => ({
+      lastPayloadHash: "payload-123",
+      lastWindowHash: "window-cached",
+      lastSessionIds: ["session-stable"],
+      lastGeneratedWindow: cachedWindow,
+    }),
+    saveState: async (_cfg, _name, value) => {
+      savedStates.push(value);
+    },
+    makeClient: async () => ({
+      invoke: async (toolName) => {
+        invocations.push(toolName);
+        if (toolName === "get_behavioral_model") {
+          return {
+            contributors: [
+              {
+                agent_type: "claude_code",
+                agent_instance_id: "claude-code-bridge-test",
+                hash: "window-cached",
+              },
+            ],
+          };
+        }
+        throw new Error(`unexpected_tool:${toolName}`);
+      },
+    }),
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.upserted, false);
+  assert.equal(result.windowHash, "window-cached");
+  assert.deepEqual(result.reasons, ["no_active_sessions_remote_current"]);
+  assert.deepEqual(invocations, ["get_behavioral_model"]);
+  assert.equal(savedStates.length, 1);
+  assert.equal(savedStates[0].lastWindowHash, "window-cached");
+});
+
+test("runLatestExtrapolation retries retryable behavioral-model parse failures", async () => {
+  const config = await makeBridgeFixture();
+  const invocations = [];
+  const savedStates = [];
+  let rawIngestAttempts = 0;
+
+  const result = await runLatestExtrapolation(config, {
+    buildPayload: async () => ({
+      sessions: [{ sessionId: "session-retry" }],
+      rawSessions: {
+        agent_type: "claude_code",
+        agent_instance_id: "claude-code-bridge-test",
+        source_kind: "claude_code",
+        sessions: [{ session_key: "session-retry" }],
+      },
+      rawPayloadHash: "payload-retry",
+    }),
+    loadState: async () => ({}),
+    saveState: async (_cfg, _name, value) => {
+      savedStates.push(value);
+    },
+    makeClient: async () => ({
+      invoke: async (toolName) => {
+        invocations.push(toolName);
+        if (toolName === "upsert_behavioral_model_from_raw_sessions") {
+          rawIngestAttempts += 1;
+          if (rawIngestAttempts < 3) {
+            throw new Error("tools_call_error:Unable to parse behavioral model JSON from LLM response");
+          }
+          return {
+            window: {
+              hash: "window-retry",
+              predictions: [],
+            },
+          };
+        }
+        if (toolName === "get_divergence_engine_status") {
+          return { running: true };
+        }
+        throw new Error(`unexpected_tool:${toolName}`);
+      },
+    }),
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.upserted, true);
+  assert.equal(result.windowHash, "window-retry");
+  assert.equal(result.attemptCount, 3);
+  assert.equal(result.retryCount, 2);
+  assert.deepEqual(result.reasons, ["raw_ingest", "raw_ingest_retry_success"]);
+  assert.deepEqual(invocations, [
+    "upsert_behavioral_model_from_raw_sessions",
+    "upsert_behavioral_model_from_raw_sessions",
+    "upsert_behavioral_model_from_raw_sessions",
+    "get_divergence_engine_status",
+  ]);
+  assert.equal(savedStates.length, 1);
+  assert.equal(savedStates[0].lastAttemptCount, 3);
+  assert.equal(savedStates[0].lastRetryCount, 2);
+  assert.equal(savedStates[0].lastError, null);
+});
+
+test("runLatestExtrapolation returns structured failure when EDAMAME MCP is unreachable", async () => {
+  const config = await makeBridgeFixture();
+  const savedStates = [];
+
+  const result = await runLatestExtrapolation(config, {
+    buildPayload: async () => ({
+      sessions: [{ sessionId: "session-unreachable" }],
+      rawSessions: {
+        agent_type: "claude_code",
+        agent_instance_id: "claude-code-bridge-test",
+        source_kind: "claude_code",
+        sessions: [{ session_key: "session-unreachable" }],
+      },
+      rawPayloadHash: "payload-unreachable",
+    }),
+    loadState: async () => ({
+      lastWindowHash: "window-previous",
+    }),
+    saveState: async (_cfg, _name, value) => {
+      savedStates.push(value);
+    },
+    makeClient: async () => ({
+      invoke: async () => {
+        throw new TypeError("fetch failed");
+      },
+    }),
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.upserted, false);
+  assert.equal(result.error, "fetch failed");
+  assert.deepEqual(result.reasons, ["edamame_mcp_unreachable"]);
+  assert.equal(result.attemptCount, 1);
+  assert.equal(result.retryCount, 0);
+  assert.equal(savedStates.length, 1);
+  assert.equal(savedStates[0].lastWindowHash, "window-previous");
+  assert.equal(savedStates[0].lastError, "fetch failed");
+});
+
+test("runLatestExtrapolation classifies MCP auth failures separately", async () => {
+  const config = await makeBridgeFixture();
+  const savedStates = [];
+
+  const result = await runLatestExtrapolation(config, {
+    buildPayload: async () => ({
+      sessions: [{ sessionId: "session-auth-failure" }],
+      rawSessions: {
+        agent_type: "claude_code",
+        agent_instance_id: "claude-code-bridge-test",
+        source_kind: "claude_code",
+        sessions: [{ session_key: "session-auth-failure" }],
+      },
+      rawPayloadHash: "payload-auth-failure",
+    }),
+    loadState: async () => ({
+      lastWindowHash: "window-previous",
+    }),
+    saveState: async (_cfg, _name, value) => {
+      savedStates.push(value);
+    },
+    makeClient: async () => ({
+      invoke: async () => {
+        throw new Error("http_401:unauthorized");
+      },
+    }),
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.upserted, false);
+  assert.equal(result.error, "http_401:unauthorized");
+  assert.deepEqual(result.reasons, ["edamame_mcp_auth_failed"]);
+  assert.equal(result.attemptCount, 1);
+  assert.equal(result.retryCount, 0);
+  assert.equal(savedStates.length, 1);
+  assert.equal(savedStates[0].lastWindowHash, "window-previous");
+  assert.equal(savedStates[0].lastError, "http_401:unauthorized");
+});
+
+test("runLatestExtrapolation returns structured failure when local PSK is missing", async () => {
+  const config = await makeBridgeFixture({ withPsk: false });
+  const savedStates = [];
+
+  const result = await runLatestExtrapolation(config, {
+    buildPayload: async () => ({
+      sessions: [{ sessionId: "session-missing-psk" }],
+      rawSessions: {
+        agent_type: "claude_code",
+        agent_instance_id: "claude-code-bridge-test",
+        source_kind: "claude_code",
+        sessions: [{ session_key: "session-missing-psk" }],
+      },
+      rawPayloadHash: "payload-missing-psk",
+    }),
+    loadState: async () => ({
+      lastWindowHash: "window-previous",
+    }),
+    saveState: async (_cfg, _name, value) => {
+      savedStates.push(value);
+    },
+    makeClient: async () => {
+      throw new Error("ENOENT: no such file or directory, open '/tmp/edamame-mcp.psk'");
+    },
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.upserted, false);
+  assert.deepEqual(result.reasons, ["edamame_mcp_psk_missing"]);
+  assert.match(result.error || "", /ENOENT/i);
+  assert.equal(savedStates.length, 1);
+  assert.equal(savedStates[0].lastWindowHash, "window-previous");
+  assert.equal(savedStates[0].lastAttemptCount, 0);
+});
+
 test("runHealthcheck surfaces MCP auth failures clearly", async () => {
   await withMockMcpAuthServer(async (endpoint) => {
     const config = await makeBridgeFixture({
@@ -455,5 +1129,150 @@ test("runHealthcheck surfaces MCP auth failures clearly", async () => {
     assert.match(endpointCheck?.detail?.summary || "", /PSK/i);
     assert.equal(authCheck?.ok, false);
     assert.equal(authCheck?.detail?.status, "auth_failed");
+  });
+});
+
+test("control center prioritizes auth failure summary and refresh result", async () => {
+  await withMockMcpAuthServer(async (endpoint) => {
+    const config = await makeBridgeFixture({
+      endpoint,
+      pskValue: "wrong-psk",
+    });
+
+    const payload = await buildControlCenterPayload(config, { refreshNow: true });
+
+    assert.match(payload.summaryLine, /PSK/i);
+    assert.equal(payload.refreshResult?.success, false);
+    assert.deepEqual(payload.refreshResult?.reasons, ["edamame_mcp_auth_failed"]);
+    assert.equal(
+      payload.health?.checks?.some(
+        (check) => check.name === "mcp.authentication" && check.ok === false,
+      ),
+      true,
+    );
+    assert.equal(payload.extrapolator?.authFailed, true);
+  });
+});
+
+test("runLatestExtrapolation returns structured failure after repeated parse failures", async () => {
+  const config = await makeBridgeFixture();
+  const savedStates = [];
+  let rawIngestAttempts = 0;
+
+  const result = await runLatestExtrapolation(config, {
+    buildPayload: async () => ({
+      sessions: [{ sessionId: "session-parse-failure" }],
+      rawSessions: {
+        agent_type: "claude_code",
+        agent_instance_id: "claude-code-bridge-test",
+        source_kind: "claude_code",
+        sessions: [{ session_key: "session-parse-failure" }],
+      },
+      rawPayloadHash: "payload-parse-failure",
+    }),
+    loadState: async () => ({}),
+    saveState: async (_cfg, _name, value) => {
+      savedStates.push(value);
+    },
+    makeClient: async () => ({
+      invoke: async (toolName) => {
+        if (toolName === "upsert_behavioral_model_from_raw_sessions") {
+          rawIngestAttempts += 1;
+          throw new Error("tools_call_error:Unable to parse behavioral model JSON from LLM response");
+        }
+        throw new Error(`unexpected_tool:${toolName}`);
+      },
+    }),
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.upserted, false);
+  assert.deepEqual(result.reasons, ["behavioral_model_generation_failed"]);
+  assert.equal(result.attemptCount, 3);
+  assert.equal(result.retryCount, 2);
+  assert.match(result.error, /Unable to parse behavioral model JSON from LLM response/);
+  assert.equal(rawIngestAttempts, 3);
+  assert.equal(savedStates.length, 1);
+  assert.equal(savedStates[0].lastAttemptCount, 3);
+  assert.equal(savedStates[0].lastRetryCount, 2);
+});
+
+test("runLatestExtrapolation pushes heartbeat window when no sessions and no cached window", async () => {
+  const config = await makeBridgeFixture();
+  const invocations = [];
+  const savedStates = [];
+  let upsertedWindowJson = null;
+
+  const result = await runLatestExtrapolation(config, {
+    buildPayload: async () => ({
+      sessions: [],
+      rawSessions: {
+        agent_type: "claude_code",
+        agent_instance_id: "claude-code-bridge-test",
+        source_kind: "claude_code",
+        sessions: [],
+      },
+      rawPayloadHash: "payload-empty",
+    }),
+    loadState: async () => ({}),
+    saveState: async (_cfg, _name, value) => {
+      savedStates.push(value);
+    },
+    makeClient: async () => ({
+      invoke: async (toolName, params) => {
+        invocations.push(toolName);
+        if (toolName === "upsert_behavioral_model") {
+          upsertedWindowJson = params.window_json;
+          return { ok: true };
+        }
+        throw new Error(`unexpected_tool:${toolName}`);
+      },
+    }),
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.upserted, true);
+  assert.deepEqual(result.reasons, ["heartbeat"]);
+  assert.equal(result.sessionCount, 0);
+  assert.deepEqual(invocations, ["upsert_behavioral_model"]);
+
+  const heartbeat = JSON.parse(upsertedWindowJson);
+  assert.equal(heartbeat.agent_type, "claude_code");
+  assert.equal(heartbeat.agent_instance_id, "claude-code-bridge-test");
+  assert.equal(heartbeat.predictions.length, 1);
+  assert.match(heartbeat.predictions[0].action, /cron tick.*no new reasoning/i);
+  assert.match(heartbeat.predictions[0].session_key, /heartbeat/);
+  assert.deepEqual(heartbeat.predictions[0].expected_l7_protocols, ["https"]);
+  assert.ok(Array.isArray(heartbeat.predictions[0].scope_process_paths));
+  assert.ok(Array.isArray(heartbeat.predictions[0].scope_parent_paths));
+  assert.ok(Array.isArray(heartbeat.predictions[0].scope_grandparent_paths));
+  assert.ok(Array.isArray(heartbeat.predictions[0].scope_any_lineage_paths));
+  assert.ok(Array.isArray(heartbeat.predictions[0].expected_grandparent_paths));
+  assert.ok(Array.isArray(heartbeat.predictions[0].not_expected_grandparent_paths));
+
+  assert.equal(savedStates.length, 1);
+  assert.deepEqual(savedStates[0].lastReasons, ["heartbeat"]);
+  assert.equal(savedStates[0].lastGeneratedWindow.agent_type, "claude_code");
+});
+
+test("healthcheck CLI emits auth failure details for invalid PSK", async () => {
+  await withMockMcpAuthServer(async (endpoint) => {
+    const config = await makeBridgeFixture({
+      endpoint,
+      pskValue: "wrong-psk",
+    });
+    const scriptPath = path.resolve(TEST_DIR, "../setup/healthcheck.sh");
+    const { code, stdout, stderr } = await runScript(
+      "bash",
+      [scriptPath, "--json", "--strict", "--config", config.configPath],
+      { cwd: path.resolve(TEST_DIR, ".."), env: process.env },
+    );
+
+    assert.equal(code, 1, `expected healthcheck CLI to fail, stderr=${stderr}`);
+    const payload = JSON.parse(stdout);
+    const authCheck = payload.checks.find((check) => check.name === "mcp.authentication");
+    assert.equal(authCheck?.ok, false);
+    assert.equal(authCheck?.detail?.reason, "edamame_mcp_auth_failed");
+    assert.match(authCheck?.detail?.summary || "", /PSK/i);
   });
 });
