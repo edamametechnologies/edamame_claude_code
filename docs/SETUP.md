@@ -120,3 +120,42 @@ This validates:
 - EDAMAME MCP reachability,
 - divergence-engine running state,
 - behavioral-model presence.
+
+## Local E2E: scripted transcript inject and `edamame_cli` verification
+
+Use this when you want to confirm the full path from a **synthetic Claude Code transcript**
+through the extrapolator into the running EDAMAME app, then read the merged model back via RPC
+(the same surface `edamame_cli` uses).
+
+Prerequisites: EDAMAME app running with MCP paired, agentic/LLM available for raw ingest, and a
+built `edamame_cli` (or `EDAMAME_CLI` pointing at the binary).
+
+```bash
+bash scripts/e2e_inject_intent.sh
+```
+
+The script:
+
+1. Checks install layout (`claude-code-edamame` config, PSK, optional `~/.claude/settings.json` marketplace entry).
+2. Writes **three** fresh `.txt` transcripts under `~/.claude/projects/<workspace-basename>-edamame-e2e-inject/`
+   (API URL + file read, shell/curl to npm, git-remote style). Each file basename is a distinct `session_key`.
+3. Runs `claude_code_extrapolator.mjs` once against your config (installed package, or repo fallback).
+4. Polls `edamame_cli rpc get_behavioral_model` until the merged behavioral model contains a
+   `predictions[]` entry **for every** synthetic session (`agent_type`, `agent_instance_id`, and `session_key`).
+   This avoids false failures when the merged contributor `hash` differs from a single-ingest `windowHash`.
+
+The script calls `edamame_cli rpc get_behavioral_model --pretty`. For `String`-typed RPC
+returns, the CLI emits a JSON string literal; the script parses twice (outer JSON string, then
+inner behavioral-model JSON). Without `--pretty`, the CLI uses Rust `Debug` formatting, which is
+not JSON and cannot be parsed reliably.
+
+Environment:
+
+| Variable | Purpose |
+|----------|---------|
+| `EDAMAME_CLI` | Path to `edamame_cli` if not on `PATH` |
+| `CLAUDE_CODE_EDAMAME_CONFIG` | Alternate `config.json` |
+| `E2E_SKIP_PLUGIN_CHECK=1` | Skip `~/.claude/settings.json` marketplace check |
+| `E2E_POLL_ATTEMPTS` | Poll count (default 24) |
+| `E2E_POLL_INTERVAL_SECS` | Seconds between polls (default 5) |
+| `E2E_STRICT_HASH=1` | Also require contributor `hash` equals extrapolator `windowHash` (strict; often false after merges) |

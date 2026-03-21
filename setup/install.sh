@@ -83,6 +83,10 @@ cp "$SOURCE_ROOT/README.md" "$INSTALL_ROOT/"
 cp -R "$SOURCE_ROOT/agents" "$INSTALL_ROOT/"
 cp -R "$SOURCE_ROOT/assets" "$INSTALL_ROOT/"
 cp -R "$SOURCE_ROOT/skills" "$INSTALL_ROOT/"
+cp -R "$SOURCE_ROOT/.claude-plugin" "$INSTALL_ROOT/"
+if [[ -f "$SOURCE_ROOT/.mcp.json" ]]; then
+  cp "$SOURCE_ROOT/.mcp.json" "$INSTALL_ROOT/"
+fi
 
 case "$OS_KERNEL" in
   MINGW*|MSYS*|CYGWIN*) ;;

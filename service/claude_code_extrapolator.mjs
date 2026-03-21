@@ -193,17 +193,28 @@ async function sleep(ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Core raw-session ingest runs an LLM; default MCP tool timeout (60s) is often too short under load. */
+const RAW_INGEST_MCP_TIMEOUT_MS = 240_000;
+
 async function invokeRawIngestWithRetry(client, rawSessions, options = {}) {
   const maxAttempts =
     Number.isFinite(options.maxAttempts) && options.maxAttempts > 0 ? options.maxAttempts : 3;
+  const ingestTimeoutMs =
+    Number.isFinite(options.rawIngestTimeoutMs) && options.rawIngestTimeoutMs > 0
+      ? options.rawIngestTimeoutMs
+      : RAW_INGEST_MCP_TIMEOUT_MS;
   let attempts = 0;
 
   while (attempts < maxAttempts) {
     attempts += 1;
     try {
-      const upsertResponse = await client.invoke("upsert_behavioral_model_from_raw_sessions", {
-        raw_sessions_json: JSON.stringify(rawSessions),
-      });
+      const upsertResponse = await client.invoke(
+        "upsert_behavioral_model_from_raw_sessions",
+        {
+          raw_sessions_json: JSON.stringify(rawSessions),
+        },
+        ingestTimeoutMs,
+      );
       return { upsertResponse, attempts };
     } catch (error) {
       if (attempts >= maxAttempts || !retryableRawIngestFailure(error)) {
