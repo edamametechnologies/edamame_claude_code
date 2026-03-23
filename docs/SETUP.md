@@ -31,7 +31,22 @@ resolves its bridge path from the plugin cache automatically. Set the
 `CLAUDE_CODE_EDAMAME_CONFIG` environment variable to point at a custom
 config file, or let it auto-resolve to the default platform path.
 
-## Install From Source (Traditional)
+## Install via EDAMAME app / posture CLI
+
+EDAMAME downloads the latest release from GitHub (HTTP zipball -- no `git`
+required) and copies files using native Rust file operations (no `bash` or
+`python` required). Works on macOS, Linux, and Windows:
+
+```bash
+edamame-posture install-agent-plugin claude_code
+edamame-posture agent-plugin-status claude_code
+```
+
+The EDAMAME Security app also exposes an "Agent Plugins" section in AI
+Settings with one-click install, status display, and intent injection test
+buttons.
+
+## Install From Source (bash)
 
 ```bash
 bash setup/install.sh /absolute/path/to/target/workspace
@@ -43,6 +58,15 @@ The installer:
 - renders a default package config,
 - renders a Claude Code MCP snippet with fully resolved paths (including absolute `node` path),
 - renders optional scheduler templates.
+
+## Install From Source (PowerShell, Windows)
+
+```powershell
+.\setup\install.ps1 -WorkspaceRoot "C:\Users\me\projects\myapp"
+```
+
+PowerShell equivalent of `install.sh` for native Windows environments. Does
+the same file copy + template rendering without requiring bash or python.
 
 ## Config Paths
 

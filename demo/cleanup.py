@@ -22,6 +22,10 @@ PID_FILES = [
     "cve_token_exfil.pid",
     "cve_sandbox.pid",
     "divergence.pid",
+    "memory_poisoning.pid",
+    "goal_drift.pid",
+    "credential_sprawl.pid",
+    "tool_poisoning.pid",
 ]
 
 CREATED_MARKERS = [
@@ -29,6 +33,9 @@ CREATED_MARKERS = [
     "cve_token_exfil.created",
     "cve_sandbox.created",
     "divergence.created",
+    "memory_poisoning.created",
+    "credential_sprawl.created",
+    "tool_poisoning.created",
 ]
 
 
