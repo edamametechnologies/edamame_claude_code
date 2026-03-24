@@ -114,20 +114,16 @@ jobs:
       - name: Verify MCP server responds
         shell: bash
         run: |
-          for i in 1 2 3; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:3000/mcp \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer $EDAMAME_PSK" \
-              -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}')
-            if [ "$STATUS" = "200" ]; then
-              echo "MCP server responding (HTTP $STATUS)"
-              exit 0
-            fi
-            echo "Attempt $i: HTTP $STATUS, retrying..."
-            sleep 3
-          done
-          echo "FAIL: MCP server not responding after 3 attempts"
-          exit 1
+          RESPONSE=$(curl -sf -X POST http://127.0.0.1:3000/mcp \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $EDAMAME_PSK" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}') || {
+            echo "FAIL: MCP server not responding"; exit 1
+          }
+          echo "MCP tools/list response (first 500 chars):"
+          echo "$RESPONSE" | head -c 500
+          echo ""
+          echo "MCP server verified"
 
       # ── Install plugin ──────────────────────────────────────────
 
