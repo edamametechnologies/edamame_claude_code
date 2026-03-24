@@ -88,24 +88,28 @@ jobs:
           echo "EDAMAME_PSK=$PSK" >> "$GITHUB_ENV"
           echo "PSK generated (${#PSK} chars)"
 
-      - name: Start MCP server (Unix)
+      - name: Start daemon + MCP server (Unix)
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          sudo edamame_posture mcp-start 3000 "$EDAMAME_PSK" &
-          echo "MCP_PID=$!" >> "$GITHUB_ENV"
+          echo "--- Starting daemon (disconnected) ---"
+          sudo edamame_posture background-start-disconnected
           sleep 5
-          echo "MCP server starting (PID $!)"
+          echo "--- Starting MCP server ---"
+          sudo edamame_posture mcp-start 3000 "$EDAMAME_PSK"
+          echo "MCP server started on port 3000"
 
-      - name: Start MCP server (Windows)
+      - name: Start daemon + MCP server (Windows)
         if: runner.os == 'Windows'
         shell: bash
         run: |
+          echo "--- Starting daemon (disconnected) ---"
           CMD=$(command -v edamame_posture.exe 2>/dev/null || echo "$HOME/edamame_posture.exe")
-          "$CMD" mcp-start 3000 "$EDAMAME_PSK" &
-          echo "MCP_PID=$!" >> "$GITHUB_ENV"
+          "$CMD" background-start-disconnected
           sleep 8
-          echo "MCP server starting (PID $!)"
+          echo "--- Starting MCP server ---"
+          "$CMD" mcp-start 3000 "$EDAMAME_PSK"
+          echo "MCP server started on port 3000"
 
       - name: Verify MCP server responds
         shell: bash
@@ -281,19 +285,20 @@ jobs:
 
       # ── Stop MCP server ─────────────────────────────────────────
 
-      - name: Stop MCP server (Unix)
+      - name: Stop daemon (Unix)
         if: always() && runner.os != 'Windows'
         shell: bash
         run: |
-          sudo kill "$MCP_PID" 2>/dev/null || true
-          echo "MCP server stopped"
+          sudo edamame_posture stop 2>/dev/null || true
+          echo "Daemon stopped"
 
-      - name: Stop MCP server (Windows)
+      - name: Stop daemon (Windows)
         if: always() && runner.os == 'Windows'
         shell: bash
         run: |
-          kill "$MCP_PID" 2>/dev/null || true
-          echo "MCP server stopped"
+          CMD=$(command -v edamame_posture.exe 2>/dev/null || echo "$HOME/edamame_posture.exe")
+          "$CMD" stop 2>/dev/null || true
+          echo "Daemon stopped"
 
       # ── Uninstall ────────────────────────────────────────────────
 
