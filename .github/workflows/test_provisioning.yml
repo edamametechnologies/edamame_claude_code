@@ -2,17 +2,33 @@ on:
   push:
     branches: [ dev, main ]
     paths:
-      - 'setup/**'
+      - '.claude-plugin/**'
+      - '.mcp.json'
+      - 'adapters/**'
+      - 'agents/**'
       - 'bridge/**'
+      - 'commands/**'
+      - 'prompts/**'
       - 'service/**'
+      - 'setup/**'
+      - 'skills/**'
       - 'tests/**'
+      - 'package.json'
       - '.github/workflows/test_provisioning.yml'
   pull_request:
     paths:
-      - 'setup/**'
+      - '.claude-plugin/**'
+      - '.mcp.json'
+      - 'adapters/**'
+      - 'agents/**'
       - 'bridge/**'
+      - 'commands/**'
+      - 'prompts/**'
       - 'service/**'
+      - 'setup/**'
+      - 'skills/**'
       - 'tests/**'
+      - 'package.json'
       - '.github/workflows/test_provisioning.yml'
   workflow_dispatch:
 
@@ -352,7 +368,7 @@ jobs:
       # backend. Without this call, agentic_analysis fails with
       # NonExistentDevice on ephemeral macOS runners. Fixed in edamame_core
       # (DEVICE_PLAN_REGISTERED gate) but not yet released; remove once
-      # edamame_posture >= 1.1.4 is published.
+      # edamame_posture >= 1.1.3 is published.
       - name: Pre-register device via plan endpoint
         shell: bash
         run: |

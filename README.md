@@ -109,7 +109,7 @@ bash setup/healthcheck.sh --strict --json
 | `bridge/` | Local stdio MCP bridge, control center, forwarding surface |
 | `adapters/` | Transcript parsing and `RawReasoningSessionPayload` assembly |
 | `service/` | Control center, extrapolator, posture facade, verdict reader, health checks |
-| `setup/` | Install, bundle, and health-check scripts plus config templates |
+| `setup/` | Install and health-check scripts plus config templates |
 | `prompts/` | Prompt contract used by EDAMAME-side raw-session ingest |
 | `docs/` | Architecture, setup, operator guidance |
 | `tests/` | Unit tests and [E2E intent injection](E2E_TESTS.md) |

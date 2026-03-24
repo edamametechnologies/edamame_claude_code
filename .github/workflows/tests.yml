@@ -2,18 +2,34 @@ on:
   push:
     branches: [ dev, main ]
     paths:
-      - 'bridge/**'
+      - '.claude-plugin/**'
+      - '.mcp.json'
       - 'adapters/**'
+      - 'agents/**'
+      - 'bridge/**'
+      - 'commands/**'
+      - 'prompts/**'
       - 'service/**'
+      - 'setup/**'
+      - 'skills/**'
       - 'tests/**'
       - 'package.json'
+      - '.github/workflows/tests.yml'
   pull_request:
     paths:
-      - 'bridge/**'
+      - '.claude-plugin/**'
+      - '.mcp.json'
       - 'adapters/**'
+      - 'agents/**'
+      - 'bridge/**'
+      - 'commands/**'
+      - 'prompts/**'
       - 'service/**'
+      - 'setup/**'
+      - 'skills/**'
       - 'tests/**'
       - 'package.json'
+      - '.github/workflows/tests.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
