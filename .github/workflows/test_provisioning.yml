@@ -6,12 +6,14 @@ on:
       - 'bridge/**'
       - 'service/**'
       - 'tests/**'
+      - '.github/workflows/test_provisioning.yml'
   pull_request:
     paths:
       - 'setup/**'
       - 'bridge/**'
       - 'service/**'
       - 'tests/**'
+      - '.github/workflows/test_provisioning.yml'
   workflow_dispatch:
 
 concurrency:
