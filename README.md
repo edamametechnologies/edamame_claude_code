@@ -55,12 +55,13 @@ cd edamame_claude_code
 bash setup/install.sh /path/to/your/workspace
 ```
 
-2. **Register the MCP server.** The installer renders a
-   `claude-code-mcp.json` snippet with fully resolved paths. Merge it into
-   your Claude Code MCP configuration. The snippet path is printed at the
-   end of the install.
+2. **Restart Claude Code**, then run `/edamame:healthcheck` to verify.
 
-3. **Restart Claude Code**, then run `/edamame:healthcheck` to verify.
+The installer automatically registers the `edamame` MCP server entry in
+Claude Code's global configuration (`~/.claude.json`). When installing via
+the EDAMAME app or `edamame-posture install-agent-plugin claude_code`, the
+same automatic registration is performed by the provisioning engine. If
+the global config already contains other servers, they are preserved.
 
 See [Setup Guide](docs/SETUP.md) for detailed config paths per platform.
 
@@ -68,9 +69,10 @@ See [Setup Guide](docs/SETUP.md) for detailed config paths per platform.
 
 - **macOS / Windows**: Start the EDAMAME Security app, enable MCP on port
   3000. Use the control center to request pairing from the app, or paste a PSK.
-- **Linux**: Use `edamame_claude_code_control_center` and select
-  "Generate, start, and pair automatically", or manually start
-  `edamame_posture mcp-start 3000 "<PSK>"` and paste the PSK.
+- **Linux**: Run `edamame-posture mcp-generate-psk` then
+  `edamame-posture mcp-start 3000 "<PSK>"`, and paste the PSK into the
+  control center. Or run `edamame_claude_code_control_center` and use
+  "Generate, start, and pair automatically".
 
 ### Troubleshooting: `env: node: No such file or directory`
 
@@ -107,11 +109,10 @@ bash setup/healthcheck.sh --strict --json
 | `bridge/` | Local stdio MCP bridge, control center, forwarding surface |
 | `adapters/` | Transcript parsing and `RawReasoningSessionPayload` assembly |
 | `service/` | Control center, extrapolator, posture facade, verdict reader, health checks |
-| `scheduler/` | Optional launchd and systemd user-job templates |
 | `setup/` | Install, bundle, and health-check scripts plus config templates |
 | `prompts/` | Prompt contract used by EDAMAME-side raw-session ingest |
 | `docs/` | Architecture, setup, operator guidance |
-| `demo/` | Demo trigger scripts for divergence and CVE detection validation |
+| -- | E2E tests live in [agent_security/tests/e2e](https://github.com/edamametechnologies/agent_security/tree/main/tests/e2e) (`--agent-type claude_code`) |
 
 ## Distribution Channels
 
@@ -121,7 +122,7 @@ bash setup/healthcheck.sh --strict --json
 | **Official Anthropic Marketplace** | Submit via [platform.claude.com/plugins/submit](https://platform.claude.com/plugins/submit) | One-click install after approval |
 | **Team/Project scope** | Add `extraKnownMarketplaces` to project `.claude/settings.json` | Auto-prompts collaborators |
 | **Local `--plugin-dir`** | `claude --plugin-dir ./edamame_claude_code` | Dev/test only |
-| **Manual install** | `bash setup/install.sh` + merge MCP snippet | Full control, any env |
+| **Manual install** | `bash setup/install.sh` (auto-registers MCP) | Full control, any env |
 
 ## Documentation
 

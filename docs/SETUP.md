@@ -42,6 +42,12 @@ edamame-posture install-agent-plugin claude_code
 edamame-posture agent-plugin-status claude_code
 ```
 
+The provisioning engine automatically registers the `edamame` MCP server
+entry in Claude Code's global configuration (`~/.claude.json`). Existing
+servers in that file are preserved. Uninstalling the plugin
+(`edamame-posture uninstall-agent-plugin claude_code`) removes the `edamame`
+entry from the global config.
+
 The EDAMAME Security app also exposes an "Agent Plugins" section in AI
 Settings with one-click install, status display, and intent injection test
 buttons.
@@ -57,7 +63,10 @@ The installer:
 - copies the package into a stable per-user install directory,
 - renders a default package config,
 - renders a Claude Code MCP snippet with fully resolved paths (including absolute `node` path),
-- renders optional scheduler templates.
+- automatically injects the `edamame` server entry into Claude Code's global configuration (`~/.claude.json`), preserving any existing servers,
+Once Claude Code launches the MCP bridge, the bridge itself refreshes the
+behavioral model on the configured cadence while the session remains
+connected.
 
 ## Install From Source (PowerShell, Windows)
 
@@ -110,19 +119,28 @@ Use `host_kind = edamame_app`.
 
 Use `host_kind = edamame_posture`.
 
+Preferred path from the MCP App:
+
+1. Run `edamame_claude_code_control_center`.
+2. Use `Generate, start, and pair automatically`.
+3. Refresh status until the MCP endpoint, divergence engine, and behavioral model checks go healthy.
+
+Manual fallback:
+
 1. Generate a PSK:
 
 ```bash
 edamame_posture mcp-generate-psk
 ```
 
-2. Start the local MCP endpoint:
+2. Start the local MCP endpoint with the same PSK:
 
 ```bash
 edamame_posture mcp-start 3000 "<PSK>"
 ```
 
-3. Paste the PSK into the control center.
+3. Paste the PSK into `edamame_claude_code_control_center` and save pairing.
+4. Refresh status until the MCP endpoint, divergence engine, and behavioral model checks go healthy.
 
 ## Troubleshooting: `env: node: No such file or directory`
 

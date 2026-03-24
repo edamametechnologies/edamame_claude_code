@@ -29,14 +29,13 @@ $StateHome  = Join-Path $env:LOCALAPPDATA "claude-code-edamame\state"
 $DataHome   = Join-Path $env:LOCALAPPDATA "claude-code-edamame"
 
 $InstallRoot = Join-Path $DataHome "current"
-$RenderedDir = Join-Path $ConfigHome "rendered"
 $ConfigPath  = Join-Path $ConfigHome "config.json"
 $ClaudeCodeMcpPath = Join-Path $ConfigHome "claude-code-mcp.json"
 
 $NodeBin = (Get-Command node -ErrorAction SilentlyContinue).Source
 if (-not $NodeBin) { $NodeBin = "node" }
 
-foreach ($dir in @($ConfigHome, $StateHome, $DataHome, $RenderedDir)) {
+foreach ($dir in @($ConfigHome, $StateHome, $DataHome)) {
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 }
 
@@ -44,7 +43,7 @@ if (Test-Path $InstallRoot) { Remove-Item -Recurse -Force $InstallRoot }
 New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
 
 $DirsToInstall = @(
-    "bridge", "adapters", "prompts", "scheduler", "service",
+    "bridge", "adapters", "prompts", "service",
     "docs", "tests", "setup", ".claude-plugin",
     "agents", "assets", "skills"
 )
@@ -100,6 +99,39 @@ if (Test-Path $McpTemplate) {
     Render-Template $McpTemplate $ClaudeCodeMcpPath
 }
 
+# --- MCP auto-injection into ~/.claude.json ---
+$GlobalMcpPath = Join-Path $env:USERPROFILE ".claude.json"
+try {
+    $SnippetContent = Get-Content -Raw $ClaudeCodeMcpPath | ConvertFrom-Json
+    $Entry = $SnippetContent.mcpServers.edamame
+    if ($Entry) {
+        if (Test-Path $GlobalMcpPath) {
+            Copy-Item -Force $GlobalMcpPath "$GlobalMcpPath.bak"
+            try {
+                $GlobalCfg = Get-Content -Raw $GlobalMcpPath | ConvertFrom-Json
+            } catch {
+                Write-Warning "$GlobalMcpPath contains malformed JSON, skipping MCP injection"
+                $GlobalCfg = $null
+            }
+        } else {
+            $GlobalCfg = [PSCustomObject]@{}
+        }
+        if ($null -ne $GlobalCfg) {
+            if (-not $GlobalCfg.PSObject.Properties["mcpServers"]) {
+                $GlobalCfg | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{})
+            }
+            if ($GlobalCfg.mcpServers.PSObject.Properties["edamame"]) {
+                $GlobalCfg.mcpServers.edamame = $Entry
+            } else {
+                $GlobalCfg.mcpServers | Add-Member -NotePropertyName "edamame" -NotePropertyValue $Entry
+            }
+            $GlobalCfg | ConvertTo-Json -Depth 10 | Set-Content -Path $GlobalMcpPath -Encoding UTF8
+        }
+    }
+} catch {
+    Write-Warning "Could not inject MCP entry: $_"
+}
+
 Write-Host @"
 
 Installed Claude Code EDAMAME package to:
@@ -111,12 +143,10 @@ Primary config:
 Claude Code MCP snippet:
   $ClaudeCodeMcpPath
 
-Rendered scheduler templates:
-  $RenderedDir
+MCP server registered automatically in ~\.claude.json
 
 Next steps:
-1. Copy the MCP snippet into your Claude Code MCP configuration.
-2. Launch Claude Code and run the edamame_claude_code_control_center tool.
-3. Click 'Request pairing from app' in the control center, or paste a PSK manually.
-4. Run: node "$InstallRoot\setup\healthcheck.sh" --strict --json
+1. Launch Claude Code and run the edamame_claude_code_control_center tool.
+2. Click 'Request pairing from app' in the control center, or paste a PSK manually.
+3. Run: node "$InstallRoot\service\healthcheck_cli.mjs" --strict --json
 "@
