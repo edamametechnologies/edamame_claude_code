@@ -115,6 +115,7 @@ jobs:
         shell: bash
         env:
           EDAMAME_LLM_API_KEY: ${{ secrets.EDAMAME_LLM_API_KEY }}
+          MSYS_NO_PATHCONV: '1'
         run: |
           echo "--- Starting daemon (disconnected) ---"
           "$EDAMAME_POSTURE" background-start-disconnected
@@ -125,6 +126,8 @@ jobs:
 
       - name: Verify MCP server responds
         shell: bash
+        env:
+          MSYS_NO_PATHCONV: '1'
         run: |
           MCP_URL="http://127.0.0.1:3000/mcp"
           HDRS="/tmp/mcp_headers.txt"
