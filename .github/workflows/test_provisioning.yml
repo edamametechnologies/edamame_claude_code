@@ -204,12 +204,12 @@ jobs:
 
       - name: Start mock MCP server (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: bash
         run: |
-          $proc = Start-Process -FilePath python -ArgumentList "tests/mock_mcp_server.py","--psk","test-psk-ci-12345","--port","3000" -PassThru -NoNewWindow -RedirectStandardError mock_stderr.txt
-          "MOCK_PID=$($proc.Id)" | Out-File -Append $env:GITHUB_ENV -Encoding utf8
-          Start-Sleep -Seconds 2
-          Write-Host "Mock server started (PID $($proc.Id))"
+          python tests/mock_mcp_server.py --psk test-psk-ci-12345 --port 3000 &
+          echo "MOCK_PID=$!" >> "$GITHUB_ENV"
+          sleep 3
+          echo "Mock server started (PID $!)"
 
       - name: Verify mock server responds
         shell: bash
@@ -246,10 +246,10 @@ jobs:
 
       - name: Stop mock MCP server (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: bash
         run: |
-          if ($env:MOCK_PID) { Stop-Process -Id $env:MOCK_PID -Force -ErrorAction SilentlyContinue }
-          Write-Host "Mock server stopped"
+          kill "$MOCK_PID" 2>/dev/null || true
+          echo "Mock server stopped"
 
       # ── Uninstall ────────────────────────────────────────────
 

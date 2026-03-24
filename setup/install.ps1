@@ -125,6 +125,8 @@ try {
             } else {
                 $GlobalCfg.mcpServers | Add-Member -NotePropertyName "edamame" -NotePropertyValue $Entry
             }
+            $GlobalDir = Split-Path -Parent $GlobalMcpPath
+            if ($GlobalDir -and -not (Test-Path $GlobalDir)) { New-Item -ItemType Directory -Path $GlobalDir -Force | Out-Null }
             $GlobalCfg | ConvertTo-Json -Depth 10 | Set-Content -Path $GlobalMcpPath -Encoding UTF8
         }
     }
