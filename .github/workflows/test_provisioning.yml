@@ -114,14 +114,26 @@ jobs:
       - name: Verify MCP server responds
         shell: bash
         run: |
-          RESPONSE=$(curl -sf -X POST http://127.0.0.1:3000/mcp \
+          echo "--- tools/list ---"
+          RESPONSE=$(curl -s -X POST http://127.0.0.1:3000/mcp \
             -H "Content-Type: application/json" \
+            -H "Accept: application/json, text/event-stream" \
             -H "Authorization: Bearer $EDAMAME_PSK" \
-            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}') || {
-            echo "FAIL: MCP server not responding"; exit 1
-          }
-          echo "MCP tools/list response (first 500 chars):"
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}')
           echo "$RESPONSE" | head -c 500
+          echo ""
+          if echo "$RESPONSE" | grep -q '"tools"'; then
+            echo "tools/list OK"
+          else
+            echo "FAIL: tools/list did not return tools"; exit 1
+          fi
+          echo "--- tools/call get_score ---"
+          SCORE=$(curl -s -X POST http://127.0.0.1:3000/mcp \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json, text/event-stream" \
+            -H "Authorization: Bearer $EDAMAME_PSK" \
+            -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_score","arguments":{}}}')
+          echo "$SCORE" | head -c 500
           echo ""
           echo "MCP server verified"
 
