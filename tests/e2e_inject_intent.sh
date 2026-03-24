@@ -72,6 +72,10 @@ resolve_edamame_cli() {
     printf '%s' "$EDAMAME_CLI"
     return 0
   fi
+  if command -v edamame_cli >/dev/null 2>&1; then
+    command -v edamame_cli
+    return 0
+  fi
   if command -v edamame-cli >/dev/null 2>&1; then
     command -v edamame-cli
     return 0
