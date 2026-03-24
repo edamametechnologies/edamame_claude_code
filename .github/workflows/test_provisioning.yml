@@ -61,8 +61,9 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf \
             https://raw.githubusercontent.com/edamametechnologies/edamame_posture_cli/main/install.sh \
             | sudo sh -s -- --force-binary
-          echo "--- edamame_posture installed ---"
-          edamame_posture --version || true
+          EP=$(command -v edamame_posture 2>/dev/null || echo /usr/local/bin/edamame_posture)
+          echo "EDAMAME_POSTURE=$EP" >> "$GITHUB_ENV"
+          "$EP" --version
 
       - name: Install edamame_posture (Windows)
         if: runner.os == 'Windows'
@@ -72,15 +73,14 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf \
             https://raw.githubusercontent.com/edamametechnologies/edamame_posture_cli/main/install.sh \
             | sh -s -- --force-binary
-          echo "--- edamame_posture installed ---"
-          edamame_posture.exe --version || "$HOME/edamame_posture.exe" --version || true
+          EP=$(command -v edamame_posture.exe 2>/dev/null || command -v edamame_posture 2>/dev/null || echo "$HOME/edamame_posture.exe")
+          echo "EDAMAME_POSTURE=$EP" >> "$GITHUB_ENV"
+          "$EP" --version
 
       - name: Generate PSK
         shell: bash
         run: |
-          PSK=$(edamame_posture mcp-generate-psk 2>/dev/null | head -n1 || \
-                "$HOME/edamame_posture" mcp-generate-psk 2>/dev/null | head -n1 || \
-                "$HOME/edamame_posture.exe" mcp-generate-psk 2>/dev/null | head -n1)
+          PSK=$("$EDAMAME_POSTURE" mcp-generate-psk 2>/dev/null | head -n1)
           if [ -z "$PSK" ] || [ ${#PSK} -lt 32 ]; then
             echo "FAIL: could not generate PSK (got: '$PSK')"
             exit 1
@@ -93,10 +93,10 @@ jobs:
         shell: bash
         run: |
           echo "--- Starting daemon (disconnected) ---"
-          sudo edamame_posture background-start-disconnected
+          sudo "$EDAMAME_POSTURE" background-start-disconnected
           sleep 5
           echo "--- Starting MCP server ---"
-          sudo edamame_posture mcp-start 3000 "$EDAMAME_PSK"
+          sudo "$EDAMAME_POSTURE" mcp-start 3000 "$EDAMAME_PSK"
           echo "MCP server started on port 3000"
 
       - name: Start daemon + MCP server (Windows)
@@ -104,11 +104,10 @@ jobs:
         shell: bash
         run: |
           echo "--- Starting daemon (disconnected) ---"
-          CMD=$(command -v edamame_posture.exe 2>/dev/null || echo "$HOME/edamame_posture.exe")
-          "$CMD" background-start-disconnected
+          "$EDAMAME_POSTURE" background-start-disconnected
           sleep 8
           echo "--- Starting MCP server ---"
-          "$CMD" mcp-start 3000 "$EDAMAME_PSK"
+          "$EDAMAME_POSTURE" mcp-start 3000 "$EDAMAME_PSK"
           echo "MCP server started on port 3000"
 
       - name: Verify MCP server responds
@@ -315,26 +314,32 @@ jobs:
           node "$INSTALL_ROOT/service/healthcheck_cli.mjs" --config "$CONFIG_PATH" --json || true
           echo "--- Healthcheck completed ---"
 
-      # ── Intent E2E (full LLM-backed, Unix only) ──────────────
+      # ── Intent E2E (full LLM-backed) ───────────────────────────
 
-      - name: Install edamame_cli (Unix)
-        if: runner.os != 'Windows'
+      - name: Install edamame_cli
         shell: bash
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf \
-            https://raw.githubusercontent.com/edamametechnologies/edamame_cli/main/install.sh \
-            | sudo sh -s -- --force-binary
-          edamame_cli --version || edamame-cli --version || true
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            curl --proto '=https' --tlsv1.2 -sSf \
+              https://raw.githubusercontent.com/edamametechnologies/edamame_cli/main/install.sh \
+              | sh -s -- --force-binary
+            EC=$(command -v edamame_cli.exe 2>/dev/null || command -v edamame_cli 2>/dev/null || echo "$HOME/edamame_cli.exe")
+          else
+            curl --proto '=https' --tlsv1.2 -sSf \
+              https://raw.githubusercontent.com/edamametechnologies/edamame_cli/main/install.sh \
+              | sudo sh -s -- --force-binary
+            EC=$(command -v edamame_cli 2>/dev/null || echo /usr/local/bin/edamame_cli)
+          fi
+          echo "EDAMAME_CLI=$EC" >> "$GITHUB_ENV"
+          "$EC" --version
 
       - name: Configure agentic LLM
-        if: runner.os != 'Windows'
         shell: bash
         run: |
-          edamame_cli rpc agentic_set_llm_config "{\"provider\":\"anthropic\",\"api_key\":\"${{ secrets.ANTHROPIC_API_KEY }}\",\"model\":\"\",\"base_url\":\"\",\"mcp_psk\":\"$EDAMAME_PSK\",\"slack_bot_token\":\"\",\"slack_actions_channel\":\"\",\"slack_escalations_channel\":\"\",\"telegram_bot_token\":\"\",\"telegram_chat_id\":\"\",\"slack_enabled\":false,\"telegram_enabled\":false}"
+          "$EDAMAME_CLI" rpc agentic_set_llm_config "{\"provider\":\"claude\",\"api_key\":\"${{ secrets.ANTHROPIC_API_KEY }}\",\"model\":\"\",\"base_url\":\"\",\"mcp_psk\":\"$EDAMAME_PSK\",\"slack_bot_token\":\"\",\"slack_actions_channel\":\"\",\"slack_escalations_channel\":\"\",\"telegram_bot_token\":\"\",\"telegram_chat_id\":\"\",\"slack_enabled\":false,\"telegram_enabled\":false}"
           sleep 5
 
       - name: Run intent E2E
-        if: runner.os != 'Windows'
         timeout-minutes: 10
         shell: bash
         env:
@@ -342,6 +347,7 @@ jobs:
           E2E_POLL_INTERVAL_SECS: "5"
           E2E_SKIP_PROVISION_STRICT: "1"
           E2E_SKIP_PLUGIN_CHECK: "1"
+          EDAMAME_CLI: ${{ env.EDAMAME_CLI }}
         run: |
           bash tests/e2e_inject_intent.sh
 
@@ -351,15 +357,14 @@ jobs:
         if: always() && runner.os != 'Windows'
         shell: bash
         run: |
-          sudo edamame_posture stop 2>/dev/null || true
+          sudo "$EDAMAME_POSTURE" stop 2>/dev/null || true
           echo "Daemon stopped"
 
       - name: Stop daemon (Windows)
         if: always() && runner.os == 'Windows'
         shell: bash
         run: |
-          CMD=$(command -v edamame_posture.exe 2>/dev/null || echo "$HOME/edamame_posture.exe")
-          "$CMD" stop 2>/dev/null || true
+          "$EDAMAME_POSTURE" stop 2>/dev/null || true
           echo "Daemon stopped"
 
       # ── Uninstall ────────────────────────────────────────────────
