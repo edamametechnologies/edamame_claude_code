@@ -386,6 +386,146 @@ jobs:
         run: |
           bash tests/e2e_inject_intent.sh
 
+      # ── CVE / Detection E2E ──────────────────────────────────────
+      # Downloads trigger scripts from agent_security (public) and runs
+      # a subset of CVE scenarios against the live posture daemon.
+      # Verifies that edamame_posture detects the simulated attacks by
+      # checking for sessions to the trigger destinations.
+
+      - name: Download CVE trigger scripts
+        shell: bash
+        run: |
+          TRIGGERS_DIR="${RUNNER_TEMP:-/tmp}/cve_triggers"
+          mkdir -p "$TRIGGERS_DIR"
+          BASE_URL="https://raw.githubusercontent.com/edamametechnologies/agent_security/main/tests/e2e/triggers"
+          for f in _common.py _native_udp_probe.py cleanup.py \
+                   trigger_cve_token_exfil.py trigger_memory_poisoning.py \
+                   trigger_credential_sprawl.py trigger_tool_poisoning_effects.py \
+                   trigger_divergence.py trigger_goal_drift.py \
+                   trigger_blacklist_comm.py; do
+            curl -sfL "$BASE_URL/$f" -o "$TRIGGERS_DIR/$f" || echo "WARN: failed to download $f"
+          done
+          echo "CVE_TRIGGERS_DIR=$TRIGGERS_DIR" >> "$GITHUB_ENV"
+          ls -la "$TRIGGERS_DIR"
+
+      - name: Run CVE detection scenarios
+        timeout-minutes: 15
+        shell: bash
+        env:
+          EDAMAME_CLI: ${{ env.EDAMAME_CLI }}
+          EDAMAME_AGENT_TYPE: claude_code
+        run: |
+          TRIGGERS_DIR="$CVE_TRIGGERS_DIR"
+          CLI="$EDAMAME_CLI"
+          AGENT_TYPE="claude_code"
+
+          TRIGGER_DURATION=60
+          POST_WAIT=20
+          COOLDOWN=5
+          POLL_ATTEMPTS=8
+          POLL_INTERVAL=10
+
+          SCENARIOS_PASS=0
+          SCENARIOS_FAIL=0
+          SCENARIOS_SKIP=0
+
+          run_scenario() {
+            local name="$1"
+            local script="trigger_${name}.py"
+            local target_desc="$2"
+
+            if [ ! -f "$TRIGGERS_DIR/$script" ]; then
+              echo "SKIP: $script not found"
+              SCENARIOS_SKIP=$((SCENARIOS_SKIP + 1))
+              return 0
+            fi
+
+            echo ""
+            echo "=========================================="
+            echo "SCENARIO: $name"
+            echo "=========================================="
+
+            echo "--- Starting trigger (${TRIGGER_DURATION}s) ---"
+            python3 "$TRIGGERS_DIR/$script" \
+              --agent-type "$AGENT_TYPE" \
+              --duration "$TRIGGER_DURATION" &
+            local TPID=$!
+            echo "Trigger PID: $TPID"
+
+            echo "--- Waiting ${POST_WAIT}s for session ingestion ---"
+            sleep "$POST_WAIT"
+
+            echo "--- Checking sessions via edamame_cli ---"
+            local FOUND=0
+            for ((i = 1; i <= POLL_ATTEMPTS; i++)); do
+              echo "  poll $i/$POLL_ATTEMPTS"
+              local SESSIONS
+              SESSIONS=$("$CLI" rpc get_current_sessions 2>/dev/null || echo "")
+              if echo "$SESSIONS" | python3 -c "
+          import json, sys
+          raw = sys.stdin.read().strip()
+          if raw.startswith('Result: '):
+              raw = raw[len('Result: '):]
+          try:
+              data = json.loads(raw)
+              if isinstance(data, str):
+                  data = json.loads(data)
+          except Exception:
+              sys.exit(1)
+          sessions = data if isinstance(data, list) else data.get('sessions', [])
+          found = any(
+              '${target_desc}' in json.dumps(s)
+              for s in sessions
+          )
+          sys.exit(0 if found else 1)
+          " 2>/dev/null; then
+                FOUND=1
+                echo "  Session detected for $name"
+                break
+              fi
+              sleep "$POLL_INTERVAL"
+            done
+
+            echo "--- Stopping trigger ---"
+            kill "$TPID" 2>/dev/null || true
+            wait "$TPID" 2>/dev/null || true
+
+            echo "--- Running cleanup ---"
+            python3 "$TRIGGERS_DIR/cleanup.py" --agent-type "$AGENT_TYPE" 2>/dev/null || true
+
+            if [ "$FOUND" -eq 1 ]; then
+              echo "PASS: $name - session detected"
+              SCENARIOS_PASS=$((SCENARIOS_PASS + 1))
+            else
+              echo "WARN: $name - no session detected (non-fatal in CI)"
+              SCENARIOS_FAIL=$((SCENARIOS_FAIL + 1))
+            fi
+
+            sleep "$COOLDOWN"
+          }
+
+          echo "=== CVE Detection E2E Suite ==="
+          echo "Agent type: $AGENT_TYPE"
+          echo "Trigger duration: ${TRIGGER_DURATION}s"
+          echo ""
+
+          run_scenario "cve_token_exfil" "portquiz"
+          run_scenario "memory_poisoning" "portquiz"
+          run_scenario "credential_sprawl" "portquiz"
+          run_scenario "tool_poisoning_effects" "portquiz"
+          run_scenario "divergence" "1.0.0.1"
+          run_scenario "goal_drift" "1.1.1.1"
+
+          echo ""
+          echo "=========================================="
+          echo "CVE Suite Summary"
+          echo "  PASS: $SCENARIOS_PASS"
+          echo "  WARN: $SCENARIOS_FAIL"
+          echo "  SKIP: $SCENARIOS_SKIP"
+          echo "=========================================="
+
+          python3 "$TRIGGERS_DIR/cleanup.py" --agent-type "$AGENT_TYPE" 2>/dev/null || true
+
       # ── Stop MCP server ─────────────────────────────────────────
 
       - name: Stop daemon (Unix)
