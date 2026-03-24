@@ -114,25 +114,38 @@ jobs:
       - name: Verify MCP server responds
         shell: bash
         run: |
-          echo "--- tools/list ---"
-          RESPONSE=$(curl -s -X POST http://127.0.0.1:3000/mcp \
-            -H "Content-Type: application/json" \
-            -H "Accept: application/json, text/event-stream" \
-            -H "Authorization: Bearer $EDAMAME_PSK" \
-            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}')
-          echo "$RESPONSE" | head -c 500
+          MCP_URL="http://127.0.0.1:3000/mcp"
+          MCP_HDR=(-H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -H "Authorization: Bearer $EDAMAME_PSK")
+
+          echo "--- initialize ---"
+          INIT=$(curl -s -X POST "$MCP_URL" "${MCP_HDR[@]}" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci-test","version":"1.0"}}}')
+          echo "$INIT" | head -c 500
           echo ""
-          if echo "$RESPONSE" | grep -q '"tools"'; then
+          SESSION=$(echo "$INIT" | grep -o '"sessionId":"[^"]*"' | head -1 | cut -d'"' -f4)
+          if [ -n "$SESSION" ]; then
+            MCP_HDR+=(-H "Mcp-Session-Id: $SESSION")
+            echo "Session: $SESSION"
+          fi
+
+          echo "--- initialized (notification) ---"
+          curl -s -X POST "$MCP_URL" "${MCP_HDR[@]}" \
+            -d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}' > /dev/null 2>&1 || true
+
+          echo "--- tools/list ---"
+          TOOLS=$(curl -s -X POST "$MCP_URL" "${MCP_HDR[@]}" \
+            -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')
+          echo "$TOOLS" | head -c 500
+          echo ""
+          if echo "$TOOLS" | grep -q '"tools"'; then
             echo "tools/list OK"
           else
             echo "FAIL: tools/list did not return tools"; exit 1
           fi
+
           echo "--- tools/call get_score ---"
-          SCORE=$(curl -s -X POST http://127.0.0.1:3000/mcp \
-            -H "Content-Type: application/json" \
-            -H "Accept: application/json, text/event-stream" \
-            -H "Authorization: Bearer $EDAMAME_PSK" \
-            -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_score","arguments":{}}}')
+          SCORE=$(curl -s -X POST "$MCP_URL" "${MCP_HDR[@]}" \
+            -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_score","arguments":{}}}')
           echo "$SCORE" | head -c 500
           echo ""
           echo "MCP server verified"
