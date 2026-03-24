@@ -48,7 +48,84 @@ jobs:
         with:
           python-version: '3.12'
 
-      # ── Install ──────────────────────────────────────────────
+      # ── Install edamame_posture (real MCP server) ───────────────
+      # PSK pairing mode: install posture CLI, generate PSK, start MCP.
+      # App pairing mode (optional): the plugin control center UI handles
+      # pairing with the EDAMAME desktop app -- not tested in CI.
+
+      - name: Install edamame_posture (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          echo "--- Installing edamame_posture ---"
+          curl --proto '=https' --tlsv1.2 -sSf \
+            https://raw.githubusercontent.com/edamametechnologies/edamame_posture_cli/main/install.sh \
+            | sudo sh -s -- --force-binary
+          echo "--- edamame_posture installed ---"
+          edamame_posture --version || true
+
+      - name: Install edamame_posture (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "--- Installing edamame_posture ---"
+          curl --proto '=https' --tlsv1.2 -sSf \
+            https://raw.githubusercontent.com/edamametechnologies/edamame_posture_cli/main/install.sh \
+            | sh -s -- --force-binary
+          echo "--- edamame_posture installed ---"
+          edamame_posture.exe --version || "$HOME/edamame_posture.exe" --version || true
+
+      - name: Generate PSK
+        shell: bash
+        run: |
+          PSK=$(edamame_posture mcp-generate-psk 2>/dev/null | head -n1 || \
+                "$HOME/edamame_posture" mcp-generate-psk 2>/dev/null | head -n1 || \
+                "$HOME/edamame_posture.exe" mcp-generate-psk 2>/dev/null | head -n1)
+          if [ -z "$PSK" ] || [ ${#PSK} -lt 32 ]; then
+            echo "FAIL: could not generate PSK (got: '$PSK')"
+            exit 1
+          fi
+          echo "EDAMAME_PSK=$PSK" >> "$GITHUB_ENV"
+          echo "PSK generated (${#PSK} chars)"
+
+      - name: Start MCP server (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          sudo edamame_posture mcp-start 3000 "$EDAMAME_PSK" &
+          echo "MCP_PID=$!" >> "$GITHUB_ENV"
+          sleep 5
+          echo "MCP server starting (PID $!)"
+
+      - name: Start MCP server (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          CMD=$(command -v edamame_posture.exe 2>/dev/null || echo "$HOME/edamame_posture.exe")
+          "$CMD" mcp-start 3000 "$EDAMAME_PSK" &
+          echo "MCP_PID=$!" >> "$GITHUB_ENV"
+          sleep 8
+          echo "MCP server starting (PID $!)"
+
+      - name: Verify MCP server responds
+        shell: bash
+        run: |
+          for i in 1 2 3; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:3000/mcp \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $EDAMAME_PSK" \
+              -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}')
+            if [ "$STATUS" = "200" ]; then
+              echo "MCP server responding (HTTP $STATUS)"
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $STATUS, retrying..."
+            sleep 3
+          done
+          echo "FAIL: MCP server not responding after 3 attempts"
+          exit 1
+
+      # ── Install plugin ──────────────────────────────────────────
 
       - name: Run install (Unix)
         if: runner.os != 'Windows'
@@ -66,7 +143,7 @@ jobs:
           & "$PWD\setup\install.ps1" -WorkspaceRoot "$PWD"
           Write-Host "--- Install completed ---"
 
-      # ── Resolve paths ────────────────────────────────────────
+      # ── Resolve paths ────────────────────────────────────────────
 
       - name: Resolve installed paths (Unix)
         if: runner.os != 'Windows'
@@ -103,7 +180,7 @@ jobs:
           "GLOBAL_MCP=$GlobalMcp"       | Out-File -Append $env:GITHUB_ENV -Encoding utf8
           "CONFIG_PATH=$ConfigDir\config.json" | Out-File -Append $env:GITHUB_ENV -Encoding utf8
 
-      # ── Verify installed layout ──────────────────────────────
+      # ── Verify installed layout ──────────────────────────────────
 
       - name: Verify installed layout (Unix)
         if: runner.os != 'Windows'
@@ -149,7 +226,7 @@ jobs:
           if ($fail) { exit 1 }
           Write-Host "--- Layout verified ---"
 
-      # ── Verify package.json version ──────────────────────────
+      # ── Verify package.json version ──────────────────────────────
 
       - name: Verify package.json version
         shell: bash
@@ -162,7 +239,7 @@ jobs:
             console.log('Installed version:', pkg.version);
           "
 
-      # ── Verify global MCP registration ──────────────────────
+      # ── Verify global MCP registration ──────────────────────────
 
       - name: Verify global MCP config
         shell: bash
@@ -181,52 +258,19 @@ jobs:
           "
           echo "--- Global MCP verified ---"
 
-      # ── PSK pairing ─────────────────────────────────────────
+      # ── PSK pairing with real posture MCP ──────────────────────
 
-      - name: Write test PSK
+      - name: Write PSK to plugin state
         shell: bash
         run: |
           PSK_FILE="$STATE_DIR/edamame-mcp.psk"
           mkdir -p "$(dirname "$PSK_FILE")"
-          echo -n "test-psk-ci-12345" > "$PSK_FILE"
+          echo -n "$EDAMAME_PSK" > "$PSK_FILE"
           echo "PSK written to $PSK_FILE"
 
-      # ── Mock MCP server ─────────────────────────────────────
+      # ── Healthcheck via real MCP ────────────────────────────────
 
-      - name: Start mock MCP server (Unix)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          python3 tests/mock_mcp_server.py --psk test-psk-ci-12345 --port 3000 &
-          echo "MOCK_PID=$!" >> "$GITHUB_ENV"
-          sleep 2
-          echo "Mock server started (PID $!)"
-
-      - name: Start mock MCP server (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          python tests/mock_mcp_server.py --psk test-psk-ci-12345 --port 3000 &
-          echo "MOCK_PID=$!" >> "$GITHUB_ENV"
-          sleep 3
-          echo "Mock server started (PID $!)"
-
-      - name: Verify mock server responds
-        shell: bash
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:3000/mcp \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer test-psk-ci-12345" \
-            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}')
-          if [ "$STATUS" != "200" ]; then
-            echo "FAIL: mock server returned $STATUS"
-            exit 1
-          fi
-          echo "Mock server responding (HTTP $STATUS)"
-
-      # ── Healthcheck via MCP ─────────────────────────────────
-
-      - name: Run healthcheck against mock server
+      - name: Run healthcheck against real MCP
         shell: bash
         env:
           EDAMAME_MCP_ENDPOINT: http://127.0.0.1:3000/mcp
@@ -235,23 +279,23 @@ jobs:
           node "$INSTALL_ROOT/service/healthcheck_cli.mjs" --config "$CONFIG_PATH" --json || true
           echo "--- Healthcheck completed ---"
 
-      # ── Stop mock server ─────────────────────────────────────
+      # ── Stop MCP server ─────────────────────────────────────────
 
-      - name: Stop mock MCP server (Unix)
-        if: runner.os != 'Windows'
+      - name: Stop MCP server (Unix)
+        if: always() && runner.os != 'Windows'
         shell: bash
         run: |
-          kill "$MOCK_PID" 2>/dev/null || true
-          echo "Mock server stopped"
+          sudo kill "$MCP_PID" 2>/dev/null || true
+          echo "MCP server stopped"
 
-      - name: Stop mock MCP server (Windows)
-        if: runner.os == 'Windows'
+      - name: Stop MCP server (Windows)
+        if: always() && runner.os == 'Windows'
         shell: bash
         run: |
-          kill "$MOCK_PID" 2>/dev/null || true
-          echo "Mock server stopped"
+          kill "$MCP_PID" 2>/dev/null || true
+          echo "MCP server stopped"
 
-      # ── Uninstall ────────────────────────────────────────────
+      # ── Uninstall ────────────────────────────────────────────────
 
       - name: Uninstall (Unix)
         if: runner.os != 'Windows'
@@ -295,7 +339,7 @@ jobs:
           }
           Write-Host "--- Uninstall completed ---"
 
-      # ── Verify uninstall ─────────────────────────────────────
+      # ── Verify uninstall ─────────────────────────────────────────
 
       - name: Verify uninstall (Unix)
         if: runner.os != 'Windows'
@@ -348,7 +392,7 @@ jobs:
           if ($fail) { exit 1 }
           Write-Host "--- Uninstall verified ---"
 
-      # ── Slack alert ──────────────────────────────────────────
+      # ── Slack alert ──────────────────────────────────────────────
 
       - name: Slack alert on failure
         if: failure()
