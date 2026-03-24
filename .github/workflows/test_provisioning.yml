@@ -330,7 +330,7 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          sudo edamame_posture background-configure-agentic "$EDAMAME_PSK" "anthropic" "${{ secrets.ANTHROPIC_API_KEY }}"
+          edamame_cli rpc agentic_set_llm_config "{\"provider\":\"anthropic\",\"api_key\":\"${{ secrets.ANTHROPIC_API_KEY }}\",\"model\":\"\",\"base_url\":\"\",\"mcp_psk\":\"$EDAMAME_PSK\",\"slack_bot_token\":\"\",\"slack_actions_channel\":\"\",\"slack_escalations_channel\":\"\",\"telegram_bot_token\":\"\",\"telegram_chat_id\":\"\",\"slack_enabled\":false,\"telegram_enabled\":false}"
           sleep 5
 
       - name: Run intent E2E
