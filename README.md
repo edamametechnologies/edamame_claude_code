@@ -112,7 +112,7 @@ bash setup/healthcheck.sh --strict --json
 | `setup/` | Install, bundle, and health-check scripts plus config templates |
 | `prompts/` | Prompt contract used by EDAMAME-side raw-session ingest |
 | `docs/` | Architecture, setup, operator guidance |
-| -- | E2E tests live in [agent_security/tests/e2e](https://github.com/edamametechnologies/agent_security/tree/main/tests/e2e) (`--agent-type claude_code`) |
+| `tests/` | Unit tests and [E2E intent injection](E2E_TESTS.md) |
 
 ## Distribution Channels
 
@@ -144,6 +144,17 @@ bash setup/healthcheck.sh --strict --json
 ```bash
 node --test tests/*.test.mjs
 ```
+
+## E2E Tests
+
+Intent injection E2E test: see [E2E_TESTS.md](E2E_TESTS.md) for details.
+
+```bash
+bash tests/e2e_inject_intent.sh
+```
+
+The full cross-agent E2E harness (intent + CVE/divergence) lives in
+[agent_security/tests/e2e/](https://github.com/edamametechnologies/agent_security/tree/main/tests/e2e).
 
 ## Related Repositories
 

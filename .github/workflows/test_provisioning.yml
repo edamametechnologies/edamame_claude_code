@@ -315,6 +315,36 @@ jobs:
           node "$INSTALL_ROOT/service/healthcheck_cli.mjs" --config "$CONFIG_PATH" --json || true
           echo "--- Healthcheck completed ---"
 
+      # ── Intent E2E (full LLM-backed, Ubuntu only) ──────────────
+
+      - name: Install edamame_cli
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf \
+            https://raw.githubusercontent.com/edamametechnologies/edamame_cli/main/install.sh \
+            | sudo sh -s -- --force-binary
+          edamame_cli --version || edamame-cli --version || true
+
+      - name: Configure agentic LLM
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          sudo edamame_posture background-configure-agentic "$EDAMAME_PSK" "anthropic" "${{ secrets.ANTHROPIC_API_KEY }}"
+          sleep 5
+
+      - name: Run intent E2E
+        if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 10
+        shell: bash
+        env:
+          E2E_POLL_ATTEMPTS: "48"
+          E2E_POLL_INTERVAL_SECS: "5"
+          E2E_SKIP_PROVISION_STRICT: "1"
+          E2E_SKIP_PLUGIN_CHECK: "1"
+        run: |
+          bash tests/e2e_inject_intent.sh
+
       # ── Stop MCP server ─────────────────────────────────────────
 
       - name: Stop daemon (Unix)
