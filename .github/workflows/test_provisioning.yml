@@ -115,19 +115,16 @@ jobs:
         shell: bash
         env:
           EDAMAME_LLM_API_KEY: ${{ secrets.EDAMAME_LLM_API_KEY }}
-          MSYS_NO_PATHCONV: '1'
         run: |
           echo "--- Starting daemon (disconnected) ---"
           "$EDAMAME_POSTURE" background-start-disconnected
           sleep 8
           echo "--- Starting MCP server ---"
-          "$EDAMAME_POSTURE" mcp-start 3000 "$EDAMAME_PSK"
+          MSYS_NO_PATHCONV=1 "$EDAMAME_POSTURE" mcp-start 3000 "$EDAMAME_PSK"
           echo "MCP server started on port 3000"
 
       - name: Verify MCP server responds
         shell: bash
-        env:
-          MSYS_NO_PATHCONV: '1'
         run: |
           MCP_URL="http://127.0.0.1:3000/mcp"
           HDRS="/tmp/mcp_headers.txt"
