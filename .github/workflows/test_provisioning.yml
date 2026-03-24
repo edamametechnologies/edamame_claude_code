@@ -117,6 +117,16 @@ jobs:
           MCP_URL="http://127.0.0.1:3000/mcp"
           HDRS="/tmp/mcp_headers.txt"
 
+          mcp_curl() {
+            local SESSION_ARGS=()
+            [ -n "${MCP_SESSION:-}" ] && SESSION_ARGS=(-H "Mcp-Session-Id: $MCP_SESSION")
+            curl -s -X POST "$MCP_URL" \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json, text/event-stream" \
+              -H "Authorization: Bearer $EDAMAME_PSK" \
+              "${SESSION_ARGS[@]}" "$@"
+          }
+
           echo "--- initialize ---"
           INIT_RAW=$(curl -s -D "$HDRS" -X POST "$MCP_URL" \
             -H "Content-Type: application/json" \
@@ -127,26 +137,14 @@ jobs:
           echo "$INIT" | head -c 500
           echo ""
 
-          SESSION=$(grep -i 'mcp-session-id' "$HDRS" 2>/dev/null | tr -d '\r' | awk '{print $2}' | head -1 || true)
-          echo "Session: ${SESSION:-<none>}"
-          SESSION_HDR=""
-          [ -n "$SESSION" ] && SESSION_HDR="-H Mcp-Session-Id: $SESSION"
+          MCP_SESSION=$(grep -i 'mcp-session-id' "$HDRS" 2>/dev/null | tr -d '\r' | awk '{print $2}' | head -1 || true)
+          echo "Session: ${MCP_SESSION:-<none>}"
 
           echo "--- initialized (notification) ---"
-          curl -s -X POST "$MCP_URL" \
-            -H "Content-Type: application/json" \
-            -H "Accept: application/json, text/event-stream" \
-            -H "Authorization: Bearer $EDAMAME_PSK" \
-            ${SESSION_HDR:+"$SESSION_HDR"} \
-            -d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}' > /dev/null 2>&1 || true
+          mcp_curl -d '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}' > /dev/null 2>&1 || true
 
           echo "--- tools/list ---"
-          TOOLS_RAW=$(curl -s -X POST "$MCP_URL" \
-            -H "Content-Type: application/json" \
-            -H "Accept: application/json, text/event-stream" \
-            -H "Authorization: Bearer $EDAMAME_PSK" \
-            ${SESSION_HDR:+"$SESSION_HDR"} \
-            -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')
+          TOOLS_RAW=$(mcp_curl -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')
           TOOLS=$(echo "$TOOLS_RAW" | sed 's/^data: //')
           echo "$TOOLS" | head -c 500
           echo ""
@@ -157,12 +155,7 @@ jobs:
           fi
 
           echo "--- tools/call get_score ---"
-          SCORE_RAW=$(curl -s -X POST "$MCP_URL" \
-            -H "Content-Type: application/json" \
-            -H "Accept: application/json, text/event-stream" \
-            -H "Authorization: Bearer $EDAMAME_PSK" \
-            ${SESSION_HDR:+"$SESSION_HDR"} \
-            -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_score","arguments":{}}}')
+          SCORE_RAW=$(mcp_curl -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_score","arguments":{}}}')
           SCORE=$(echo "$SCORE_RAW" | sed 's/^data: //')
           echo "$SCORE" | head -c 500
           echo ""
