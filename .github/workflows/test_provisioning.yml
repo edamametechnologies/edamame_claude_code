@@ -1,0 +1,341 @@
+on:
+  push:
+    branches: [ dev, main ]
+    paths:
+      - 'setup/**'
+      - 'bridge/**'
+      - 'service/**'
+      - 'tests/**'
+  pull_request:
+    paths:
+      - 'setup/**'
+      - 'bridge/**'
+      - 'service/**'
+      - 'tests/**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+name: Provisioning lifecycle tests
+
+permissions: read-all
+
+jobs:
+  provision:
+    name: Provision (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # ── Install ──────────────────────────────────────────────
+
+      - name: Run install (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          echo "--- Running install.sh ---"
+          bash setup/install.sh "$PWD"
+          echo "--- Install completed ---"
+
+      - name: Run install (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "--- Running install.ps1 ---"
+          & "$PWD\setup\install.ps1" -WorkspaceRoot "$PWD"
+          Write-Host "--- Install completed ---"
+
+      # ── Resolve paths ────────────────────────────────────────
+
+      - name: Resolve installed paths (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "$(uname)" = "Darwin" ]; then
+            INSTALL_ROOT="$HOME/Library/Application Support/claude-code-edamame/current"
+            CONFIG_DIR="$HOME/Library/Application Support/claude-code-edamame"
+            STATE_DIR="$HOME/Library/Application Support/claude-code-edamame/state"
+            GLOBAL_MCP="$HOME/.claude.json"
+          else
+            INSTALL_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/claude-code-edamame/current"
+            CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/claude-code-edamame"
+            STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/claude-code-edamame"
+            GLOBAL_MCP="$HOME/.claude.json"
+          fi
+          echo "INSTALL_ROOT=$INSTALL_ROOT" >> "$GITHUB_ENV"
+          echo "CONFIG_DIR=$CONFIG_DIR" >> "$GITHUB_ENV"
+          echo "STATE_DIR=$STATE_DIR" >> "$GITHUB_ENV"
+          echo "GLOBAL_MCP=$GLOBAL_MCP" >> "$GITHUB_ENV"
+          echo "CONFIG_PATH=$CONFIG_DIR/config.json" >> "$GITHUB_ENV"
+
+      - name: Resolve installed paths (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $InstallRoot = Join-Path $env:LOCALAPPDATA "claude-code-edamame\current"
+          $ConfigDir   = Join-Path $env:APPDATA "claude-code-edamame"
+          $StateDir    = Join-Path $env:LOCALAPPDATA "claude-code-edamame\state"
+          $GlobalMcp   = Join-Path $env:USERPROFILE ".claude.json"
+          "INSTALL_ROOT=$InstallRoot"   | Out-File -Append $env:GITHUB_ENV -Encoding utf8
+          "CONFIG_DIR=$ConfigDir"       | Out-File -Append $env:GITHUB_ENV -Encoding utf8
+          "STATE_DIR=$StateDir"         | Out-File -Append $env:GITHUB_ENV -Encoding utf8
+          "GLOBAL_MCP=$GlobalMcp"       | Out-File -Append $env:GITHUB_ENV -Encoding utf8
+          "CONFIG_PATH=$ConfigDir\config.json" | Out-File -Append $env:GITHUB_ENV -Encoding utf8
+
+      # ── Verify installed layout ──────────────────────────────
+
+      - name: Verify installed layout (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          echo "--- Checking installed files ---"
+          FAIL=0
+          for f in \
+            "$INSTALL_ROOT/bridge/claude_code_edamame_mcp.mjs" \
+            "$INSTALL_ROOT/service/config.mjs" \
+            "$INSTALL_ROOT/service/health.mjs" \
+            "$INSTALL_ROOT/setup/install.sh" \
+            "$INSTALL_ROOT/package.json" \
+            "$CONFIG_PATH"; do
+            if [ -f "$f" ]; then
+              echo "  OK: $f"
+            else
+              echo "  FAIL: $f not found"
+              FAIL=1
+            fi
+          done
+          [ "$FAIL" -eq 0 ] || exit 1
+          echo "--- Layout verified ---"
+
+      - name: Verify installed layout (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "--- Checking installed files ---"
+          $fail = $false
+          $files = @(
+            "$env:INSTALL_ROOT\bridge\claude_code_edamame_mcp.mjs",
+            "$env:INSTALL_ROOT\service\config.mjs",
+            "$env:INSTALL_ROOT\service\health.mjs",
+            "$env:INSTALL_ROOT\setup\install.ps1",
+            "$env:INSTALL_ROOT\package.json",
+            "$env:CONFIG_PATH"
+          )
+          foreach ($f in $files) {
+            if (Test-Path $f) { Write-Host "  OK: $f" }
+            else { Write-Host "  FAIL: $f not found"; $fail = $true }
+          }
+          if ($fail) { exit 1 }
+          Write-Host "--- Layout verified ---"
+
+      # ── Verify package.json version ──────────────────────────
+
+      - name: Verify package.json version
+        shell: bash
+        run: |
+          node -e "
+            const pkg = JSON.parse(require('fs').readFileSync('${{ env.INSTALL_ROOT }}/package.json'.replace(/\\\\/g, '/'), 'utf8'));
+            if (!pkg.version) { console.error('FAIL: no version'); process.exit(1); }
+            console.log('Installed version:', pkg.version);
+          "
+
+      # ── Verify global MCP registration ──────────────────────
+
+      - name: Verify global MCP config
+        shell: bash
+        run: |
+          echo "--- Checking global MCP config ---"
+          node -e "
+            const fs = require('fs');
+            const p = '${{ env.GLOBAL_MCP }}'.replace(/\\\\/g, '/');
+            if (!fs.existsSync(p)) { console.error('FAIL: ' + p + ' not found'); process.exit(1); }
+            const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+            const entry = cfg?.mcpServers?.edamame;
+            if (!entry) { console.error('FAIL: mcpServers.edamame missing'); process.exit(1); }
+            if (!entry.command) { console.error('FAIL: command missing'); process.exit(1); }
+            if (!entry.args || !entry.args.length) { console.error('FAIL: args missing'); process.exit(1); }
+            console.log('MCP entry OK:', JSON.stringify(entry).slice(0, 200));
+          "
+          echo "--- Global MCP verified ---"
+
+      # ── PSK pairing ─────────────────────────────────────────
+
+      - name: Write test PSK
+        shell: bash
+        run: |
+          PSK_FILE="$STATE_DIR/edamame-mcp.psk"
+          mkdir -p "$(dirname "$PSK_FILE")"
+          echo -n "test-psk-ci-12345" > "$PSK_FILE"
+          echo "PSK written to $PSK_FILE"
+
+      # ── Mock MCP server ─────────────────────────────────────
+
+      - name: Start mock MCP server (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          python3 tests/mock_mcp_server.py --psk test-psk-ci-12345 --port 3000 &
+          echo "MOCK_PID=$!" >> "$GITHUB_ENV"
+          sleep 2
+          echo "Mock server started (PID $!)"
+
+      - name: Start mock MCP server (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $proc = Start-Process -FilePath python -ArgumentList "tests/mock_mcp_server.py","--psk","test-psk-ci-12345","--port","3000" -PassThru -NoNewWindow -RedirectStandardError mock_stderr.txt
+          "MOCK_PID=$($proc.Id)" | Out-File -Append $env:GITHUB_ENV -Encoding utf8
+          Start-Sleep -Seconds 2
+          Write-Host "Mock server started (PID $($proc.Id))"
+
+      - name: Verify mock server responds
+        shell: bash
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:3000/mcp \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer test-psk-ci-12345" \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}')
+          if [ "$STATUS" != "200" ]; then
+            echo "FAIL: mock server returned $STATUS"
+            exit 1
+          fi
+          echo "Mock server responding (HTTP $STATUS)"
+
+      # ── Healthcheck via MCP ─────────────────────────────────
+
+      - name: Run healthcheck against mock server
+        shell: bash
+        env:
+          EDAMAME_MCP_ENDPOINT: http://127.0.0.1:3000/mcp
+        run: |
+          echo "--- Running healthcheck ---"
+          CONFIG_FILE="${{ env.CONFIG_PATH }}"
+          CONFIG_FILE="${CONFIG_FILE//\\//}"
+          node "${{ env.INSTALL_ROOT }}/service/healthcheck_cli.mjs" --config "$CONFIG_FILE" --json || true
+          echo "--- Healthcheck completed ---"
+
+      # ── Stop mock server ─────────────────────────────────────
+
+      - name: Stop mock MCP server (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          kill "$MOCK_PID" 2>/dev/null || true
+          echo "Mock server stopped"
+
+      - name: Stop mock MCP server (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if ($env:MOCK_PID) { Stop-Process -Id $env:MOCK_PID -Force -ErrorAction SilentlyContinue }
+          Write-Host "Mock server stopped"
+
+      # ── Uninstall ────────────────────────────────────────────
+
+      - name: Uninstall (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          echo "--- Uninstalling ---"
+          rm -rf "$INSTALL_ROOT"
+          rm -rf "$CONFIG_DIR"
+          rm -rf "$STATE_DIR"
+
+          if [ -f "$GLOBAL_MCP" ]; then
+            node -e "
+              const fs = require('fs');
+              const p = '${{ env.GLOBAL_MCP }}'.replace(/\\\\\\\\/g, '/');
+              const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+              if (cfg.mcpServers && cfg.mcpServers.edamame) {
+                delete cfg.mcpServers.edamame;
+                fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
+                console.log('Removed edamame from MCP config');
+              }
+            "
+          fi
+          echo "--- Uninstall completed ---"
+
+      - name: Uninstall (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "--- Uninstalling ---"
+          if (Test-Path $env:INSTALL_ROOT) { Remove-Item -Recurse -Force $env:INSTALL_ROOT }
+          if (Test-Path $env:CONFIG_DIR)   { Remove-Item -Recurse -Force $env:CONFIG_DIR }
+          if (Test-Path $env:STATE_DIR)    { Remove-Item -Recurse -Force $env:STATE_DIR }
+
+          if (Test-Path $env:GLOBAL_MCP) {
+            $cfg = Get-Content -Raw $env:GLOBAL_MCP | ConvertFrom-Json
+            if ($cfg.mcpServers.PSObject.Properties["edamame"]) {
+              $cfg.mcpServers.PSObject.Properties.Remove("edamame")
+              $cfg | ConvertTo-Json -Depth 10 | Set-Content $env:GLOBAL_MCP -Encoding UTF8
+              Write-Host "Removed edamame from MCP config"
+            }
+          }
+          Write-Host "--- Uninstall completed ---"
+
+      # ── Verify uninstall ─────────────────────────────────────
+
+      - name: Verify uninstall
+        shell: bash
+        run: |
+          echo "--- Verifying uninstall ---"
+          FAIL=0
+          INSTALL_DIR="${{ env.INSTALL_ROOT }}"
+          INSTALL_DIR="${INSTALL_DIR//\\//}"
+          if [ -d "$INSTALL_DIR" ]; then
+            echo "FAIL: install dir still exists: $INSTALL_DIR"
+            FAIL=1
+          else
+            echo "  OK: install dir removed"
+          fi
+
+          MCP="${{ env.GLOBAL_MCP }}"
+          MCP="${MCP//\\//}"
+          if [ -f "$MCP" ]; then
+            node -e "
+              const cfg = JSON.parse(require('fs').readFileSync('$MCP', 'utf8'));
+              if (cfg?.mcpServers?.edamame) { console.error('FAIL: edamame entry still in MCP config'); process.exit(1); }
+              console.log('  OK: edamame entry removed from MCP config');
+            "
+          else
+            echo "  OK: MCP config file removed or never existed"
+          fi
+          [ "$FAIL" -eq 0 ] || exit 1
+          echo "--- Uninstall verified ---"
+
+      # ── Slack alert ──────────────────────────────────────────
+
+      - name: Slack alert on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          channel-id: "C072J0U9TH7"
+          slack-message: |
+            *edamame_claude_code Provisioning CI Failed*
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            OS: ${{ matrix.os }}
+            Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        continue-on-error: true
