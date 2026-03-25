@@ -521,8 +521,11 @@ jobs:
           echo "Trigger duration: ${TRIGGER_DURATION}s"
           echo ""
 
+          echo "--- Starting packet capture ---"
+          "$CLI" rpc start_capture 2>&1 || echo "WARN: start_capture failed"
+          sleep 10
           echo "--- Capture diagnostics ---"
-          "$CLI" rpc get_network_info 2>/dev/null | head -c 500 || echo "get_network_info unavailable"
+          "$CLI" rpc get_capture_status 2>/dev/null | head -c 500 || echo "get_capture_status unavailable"
           echo ""
 
           run_scenario "cve_token_exfil" "portquiz"
