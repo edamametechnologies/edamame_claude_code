@@ -420,14 +420,45 @@ jobs:
           AGENT_TYPE="claude_code"
 
           TRIGGER_DURATION=60
-          POST_WAIT=20
+          POST_WAIT=30
           COOLDOWN=5
-          POLL_ATTEMPTS=8
+          POLL_ATTEMPTS=6
           POLL_INTERVAL=10
 
           SCENARIOS_PASS=0
           SCENARIOS_FAIL=0
           SCENARIOS_SKIP=0
+
+          check_sessions() {
+            local target_desc="$1"
+            local raw
+            raw=$("$CLI" rpc get_current_sessions 2>/dev/null || echo "")
+            python3 -c "
+          import json, sys
+          raw = '''$raw'''.strip()
+          if raw.startswith('Result: '):
+              raw = raw[len('Result: '):]
+          try:
+              data = json.loads(raw)
+              if isinstance(data, str):
+                  data = json.loads(data)
+          except Exception:
+              print('  sessions: parse error')
+              sys.exit(1)
+          sessions = data if isinstance(data, list) else data.get('sessions', [])
+          print(f'  total_sessions={len(sessions)}')
+          target = '$target_desc'
+          matched = [s.get('dst_addr','') + ':' + str(s.get('dst_port','')) for s in sessions if target in json.dumps(s)]
+          if matched:
+              print(f'  matched: {matched[:5]}')
+              sys.exit(0)
+          dst_sample = [s.get('dst_addr','') + ':' + str(s.get('dst_port','')) for s in sessions[:10]]
+          if dst_sample:
+              print(f'  sample_destinations: {dst_sample}')
+          sys.exit(1)
+          " 2>&1
+            return $?
+          }
 
           run_scenario() {
             local name="$1"
@@ -459,26 +490,7 @@ jobs:
             local FOUND=0
             for ((i = 1; i <= POLL_ATTEMPTS; i++)); do
               echo "  poll $i/$POLL_ATTEMPTS"
-              local SESSIONS
-              SESSIONS=$("$CLI" rpc get_current_sessions 2>/dev/null || echo "")
-              if echo "$SESSIONS" | python3 -c "
-          import json, sys
-          raw = sys.stdin.read().strip()
-          if raw.startswith('Result: '):
-              raw = raw[len('Result: '):]
-          try:
-              data = json.loads(raw)
-              if isinstance(data, str):
-                  data = json.loads(data)
-          except Exception:
-              sys.exit(1)
-          sessions = data if isinstance(data, list) else data.get('sessions', [])
-          found = any(
-              '${target_desc}' in json.dumps(s)
-              for s in sessions
-          )
-          sys.exit(0 if found else 1)
-          " 2>/dev/null; then
+              if check_sessions "$target_desc"; then
                 FOUND=1
                 echo "  Session detected for $name"
                 break
@@ -507,6 +519,10 @@ jobs:
           echo "=== CVE Detection E2E Suite ==="
           echo "Agent type: $AGENT_TYPE"
           echo "Trigger duration: ${TRIGGER_DURATION}s"
+          echo ""
+
+          echo "--- Capture diagnostics ---"
+          "$CLI" rpc get_network_info 2>/dev/null | head -c 500 || echo "get_network_info unavailable"
           echo ""
 
           run_scenario "cve_token_exfil" "portquiz"
