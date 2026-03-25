@@ -431,23 +431,25 @@ jobs:
 
           check_sessions() {
             local target_desc="$1"
-            local raw
-            raw=$("$CLI" rpc get_current_sessions 2>/dev/null || echo "")
-            python3 -c "
+            "$CLI" rpc get_current_sessions 2>/dev/null | python3 -c "
           import json, sys
-          raw = '''$raw'''.strip()
+          raw = sys.stdin.read().strip()
           if raw.startswith('Result: '):
               raw = raw[len('Result: '):]
+          if not raw or raw == 'null':
+              print('  total_sessions=0')
+              sys.exit(1)
           try:
               data = json.loads(raw)
               if isinstance(data, str):
                   data = json.loads(data)
-          except Exception:
-              print('  sessions: parse error')
+          except Exception as e:
+              print(f'  sessions: parse error: {e}')
+              print(f'  raw_prefix: {raw[:200]}')
               sys.exit(1)
           sessions = data if isinstance(data, list) else data.get('sessions', [])
           print(f'  total_sessions={len(sessions)}')
-          target = '$target_desc'
+          target = sys.argv[1]
           matched = [s.get('dst_addr','') + ':' + str(s.get('dst_port','')) for s in sessions if target in json.dumps(s)]
           if matched:
               print(f'  matched: {matched[:5]}')
@@ -456,7 +458,7 @@ jobs:
           if dst_sample:
               print(f'  sample_destinations: {dst_sample}')
           sys.exit(1)
-          " 2>&1
+          " "$target_desc" 2>&1
             return $?
           }
 
