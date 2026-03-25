@@ -119,8 +119,8 @@ jobs:
         env:
           EDAMAME_LLM_API_KEY: ${{ secrets.EDAMAME_LLM_API_KEY }}
         run: |
-          echo "--- Starting daemon (disconnected) ---"
-          sudo -E "$EDAMAME_POSTURE" background-start-disconnected
+          echo "--- Starting daemon (disconnected + capture) ---"
+          sudo -E "$EDAMAME_POSTURE" background-start-disconnected --packet-capture
           sleep 5
           echo "--- Starting MCP server ---"
           sudo "$EDAMAME_POSTURE" mcp-start 3000 "$EDAMAME_PSK"
@@ -132,8 +132,8 @@ jobs:
         env:
           EDAMAME_LLM_API_KEY: ${{ secrets.EDAMAME_LLM_API_KEY }}
         run: |
-          echo "--- Starting daemon (disconnected) ---"
-          "$EDAMAME_POSTURE" background-start-disconnected
+          echo "--- Starting daemon (disconnected + capture) ---"
+          "$EDAMAME_POSTURE" background-start-disconnected --packet-capture
           sleep 8
           echo "--- Starting MCP server ---"
           MSYS_NO_PATHCONV=1 "$EDAMAME_POSTURE" mcp-start 3000 "$EDAMAME_PSK"
