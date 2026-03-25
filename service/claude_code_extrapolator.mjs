@@ -1,11 +1,23 @@
 #!/usr/bin/env node
 
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildRawSessionIngestPayload } from "../adapters/session_prediction_adapter.mjs";
 import { makeEdamameClient } from "../bridge/edamame_client.mjs";
 import { loadConfig, loadState, saveState, summarizeJson } from "./config.mjs";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PACKAGE_VERSION = (() => {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "..", "package.json"), "utf-8"));
+    return pkg.version || "0.0.0";
+  } catch {
+    return "0.0.0";
+  }
+})();
 
 function parseCliArgs(argv) {
   const args = { dryRun: false, json: false, configPath: null };
@@ -324,7 +336,7 @@ export async function runLatestExtrapolation(config, options = {}) {
         },
       ],
       contributors: [],
-      version: "3.0",
+      version: PACKAGE_VERSION,
       hash: "",
       ingested_at: now.toISOString(),
     };
