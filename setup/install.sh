@@ -78,6 +78,7 @@ cp "$SOURCE_ROOT/package.json" "$INSTALL_ROOT/"
 cp "$SOURCE_ROOT/README.md" "$INSTALL_ROOT/"
 
 cp -R "$SOURCE_ROOT/agents" "$INSTALL_ROOT/"
+cp -R "$SOURCE_ROOT/commands" "$INSTALL_ROOT/"
 cp -R "$SOURCE_ROOT/assets" "$INSTALL_ROOT/"
 cp -R "$SOURCE_ROOT/skills" "$INSTALL_ROOT/"
 cp -R "$SOURCE_ROOT/.claude-plugin" "$INSTALL_ROOT/"

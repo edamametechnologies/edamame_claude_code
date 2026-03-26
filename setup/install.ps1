@@ -45,7 +45,7 @@ New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
 $DirsToInstall = @(
     "bridge", "adapters", "prompts", "service",
     "docs", "tests", "setup", ".claude-plugin",
-    "agents", "assets", "skills"
+    "agents", "commands", "assets", "skills"
 )
 foreach ($d in $DirsToInstall) {
     $src = Join-Path $SourceRoot $d
