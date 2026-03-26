@@ -53,11 +53,15 @@ export async function runHealthcheck(config, options = {}) {
 
   addCheck("config.workspaceRoot", !!config.workspaceRoot, config.workspaceRoot);
   addCheck("config.claudeCodeProjectsRoot", !!config.claudeCodeProjectsRoot, config.claudeCodeProjectsRoot);
-  addCheck(
-    "psk.file",
-    await fileExists(config.edamameMcpPskFile),
-    config.edamameMcpPskFile,
-  );
+
+  const hasPsk = await fileExists(config.edamameMcpPskFile);
+  addCheck("psk.file", hasPsk, config.edamameMcpPskFile);
+
+  if (!hasPsk) {
+    result.ok = true;
+    result.message = "awaiting_pairing";
+    return result;
+  }
 
   if (String(config?.hostKind || "").trim() === "edamame_posture") {
     const {
