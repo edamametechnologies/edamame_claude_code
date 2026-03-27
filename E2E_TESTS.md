@@ -48,7 +48,7 @@ bash tests/e2e_inject_intent.sh
 
 ## CI Integration
 
-The `test_provisioning.yml` workflow runs this test on Ubuntu after installing
+The `test_e2e.yml` workflow runs this test on Ubuntu after installing
 `edamame_posture`, configuring agentic LLM, and provisioning the plugin.
 
 ## Full Cross-Agent E2E Suite

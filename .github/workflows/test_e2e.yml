@@ -14,7 +14,7 @@ on:
       - 'skills/**'
       - 'tests/**'
       - 'package.json'
-      - '.github/workflows/test_provisioning.yml'
+      - '.github/workflows/test_e2e.yml'
   pull_request:
     paths:
       - '.claude-plugin/**'
@@ -29,14 +29,14 @@ on:
       - 'skills/**'
       - 'tests/**'
       - 'package.json'
-      - '.github/workflows/test_provisioning.yml'
+      - '.github/workflows/test_e2e.yml'
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-name: Provisioning lifecycle tests
+name: E2E tests
 
 permissions: read-all
 
