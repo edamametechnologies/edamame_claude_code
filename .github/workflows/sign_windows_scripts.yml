@@ -1,0 +1,55 @@
+name: Verify PowerShell script signature
+
+on:
+  push:
+    branches: [dev, main]
+    paths:
+      - 'setup/**'
+      - '.github/workflows/sign_windows_scripts.yml'
+  pull_request:
+    paths:
+      - 'setup/**'
+      - '.github/workflows/sign_windows_scripts.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: read-all
+
+jobs:
+  verify-signature:
+    name: Verify install.ps1 Authenticode signature
+    runs-on: vm-runner-windows
+
+    steps:
+      - name: EDAMAME Posture
+        uses: edamametechnologies/edamame_posture_action@v1
+        with:
+          edamame_user: ${{ vars.EDAMAME_POSTURE_USER }}
+          edamame_domain: ${{ vars.EDAMAME_POSTURE_DOMAIN }}
+          edamame_pin: ${{ secrets.EDAMAME_POSTURE_PIN }}
+          edamame_id: ${{ github.run_id }}
+          checkout: true
+
+      - uses: KamaranL/add-signtool-action@v1
+        id: signtool
+
+      - name: Verify Authenticode signature on install.ps1
+        run: |
+          signtool verify /v /pa ./setup/install.ps1
+
+      - name: Slack alert on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          channel-id: "C072J0U9TH7"
+          slack-message: |
+            *edamame_claude_code Signature Verification Failed*
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+        continue-on-error: true
