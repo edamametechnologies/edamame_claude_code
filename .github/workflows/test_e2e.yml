@@ -314,8 +314,8 @@ jobs:
             const p = process.env.GLOBAL_MCP;
             if (!fs.existsSync(p)) { console.error('FAIL: ' + p + ' not found'); process.exit(1); }
             const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
-            const entry = cfg?.mcpServers?.edamame;
-            if (!entry) { console.error('FAIL: mcpServers.edamame missing'); process.exit(1); }
+            const entry = cfg?.mcpServers?.['edamame-code'];
+            if (!entry) { console.error('FAIL: mcpServers.edamame-code missing'); process.exit(1); }
             if (!entry.command) { console.error('FAIL: command missing'); process.exit(1); }
             if (!entry.args || !entry.args.length) { console.error('FAIL: args missing'); process.exit(1); }
             console.log('MCP entry OK:', JSON.stringify(entry).slice(0, 200));
@@ -584,10 +584,10 @@ jobs:
               const fs = require('fs');
               const p = process.env.GLOBAL_MCP;
               const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
-              if (cfg.mcpServers && cfg.mcpServers.edamame) {
-                delete cfg.mcpServers.edamame;
+              if (cfg.mcpServers && cfg.mcpServers['edamame-code']) {
+                delete cfg.mcpServers['edamame-code'];
                 fs.writeFileSync(p, JSON.stringify(cfg, null, 2));
-                console.log('Removed edamame from MCP config');
+                console.log('Removed edamame-code from MCP config');
               }
             "
           fi
@@ -604,10 +604,10 @@ jobs:
 
           if (Test-Path $env:GLOBAL_MCP) {
             $cfg = Get-Content -Raw $env:GLOBAL_MCP | ConvertFrom-Json
-            if ($cfg.mcpServers.PSObject.Properties["edamame"]) {
-              $cfg.mcpServers.PSObject.Properties.Remove("edamame")
+            if ($cfg.mcpServers.PSObject.Properties["edamame-code"]) {
+              $cfg.mcpServers.PSObject.Properties.Remove("edamame-code")
               $cfg | ConvertTo-Json -Depth 10 | Set-Content $env:GLOBAL_MCP -Encoding UTF8
-              Write-Host "Removed edamame from MCP config"
+              Write-Host "Removed edamame-code from MCP config"
             }
           }
           Write-Host "--- Uninstall completed ---"
@@ -630,8 +630,8 @@ jobs:
           if [ -f "$GLOBAL_MCP" ]; then
             node -e "
               const cfg = JSON.parse(require('fs').readFileSync(process.env.GLOBAL_MCP, 'utf8'));
-              if (cfg?.mcpServers?.edamame) { console.error('FAIL: edamame entry still in MCP config'); process.exit(1); }
-              console.log('  OK: edamame entry removed from MCP config');
+              if (cfg?.mcpServers?.['edamame-code']) { console.error('FAIL: edamame-code entry still in MCP config'); process.exit(1); }
+              console.log('  OK: edamame-code entry removed from MCP config');
             "
           else
             echo "  OK: MCP config file removed or never existed"
@@ -653,8 +653,8 @@ jobs:
           }
           if (Test-Path $env:GLOBAL_MCP) {
             $cfg = Get-Content -Raw $env:GLOBAL_MCP | ConvertFrom-Json
-            if ($cfg.mcpServers.PSObject.Properties["edamame"]) {
-              Write-Host "FAIL: edamame entry still in MCP config"
+            if ($cfg.mcpServers.PSObject.Properties["edamame-code"]) {
+              Write-Host "FAIL: edamame-code entry still in MCP config"
               $fail = $true
             } else {
               Write-Host "  OK: edamame entry removed from MCP config"
