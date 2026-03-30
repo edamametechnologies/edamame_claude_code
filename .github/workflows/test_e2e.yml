@@ -364,16 +364,6 @@ jobs:
           echo "EDAMAME_CLI=$EC" >> "$GITHUB_ENV"
           "$EC" --version
 
-      # WORKAROUND: The plan endpoint auto-registers the device_id in the
-      # backend. Without this call, agentic_analysis fails with
-      # NonExistentDevice on ephemeral macOS runners. Fixed in edamame_core
-      # (DEVICE_PLAN_REGISTERED gate) but not yet released; remove once
-      # edamame_posture >= 1.1.3 is published.
-      - name: Pre-register device via plan endpoint
-        shell: bash
-        run: |
-          "$EDAMAME_CLI" rpc agentic_get_subscription_status || echo "WARN: plan pre-registration failed (non-fatal)"
-
       - name: Run intent E2E
         timeout-minutes: 10
         shell: bash
