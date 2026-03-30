@@ -54,10 +54,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add setup/install.ps1
-          $hasChanges = git diff --cached --quiet; $LASTEXITCODE -ne 0
-          if ($hasChanges) {
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
             git commit -m "Sign setup/install.ps1 with Authenticode [skip ci]"
-            git push
+            git push origin main
           } else {
             Write-Host "No signature changes to commit"
           }
