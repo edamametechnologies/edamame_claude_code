@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildRawSessionIngestPayload, collectTranscriptSessions } from "../adapters/session_prediction_adapter.mjs";
 
 async function makeTempFixture() {
@@ -518,7 +519,7 @@ Host: www.edamame.tech (35.71.142.77)
 test("collectTranscriptSessions parses sample_session.jsonl fixture file", async () => {
   const fixture = await makeTempFixture();
   const fixtureSource = path.resolve(
-    path.dirname(new URL(import.meta.url).pathname),
+    path.dirname(fileURLToPath(import.meta.url)),
     "fixtures/sample_session.jsonl",
   );
   const destPath = path.join(fixture.transcriptDir, "sample-session.jsonl");

@@ -445,7 +445,7 @@ test("control center app pairing keeps the canonical Claude Code client name", a
   }
 });
 
-test("control center can auto-pair a local posture host", async () => {
+test("control center can auto-pair a local posture host", { skip: process.platform === "win32" }, async () => {
   const config = await makeBridgeFixture({
     withPsk: false,
     hostKind: "edamame_posture",
@@ -547,7 +547,7 @@ test("handleRequest serves the control-center app resource", async () => {
   assert.match(resourcesResponse.result.contents[0].text, /Claude Code EDAMAME Control Center/);
 });
 
-test("healthcheck flags posture system service when expected but not ready", async () => {
+test("healthcheck flags posture system service when expected but not ready", { skip: process.platform === "win32" }, async () => {
   const config = await makeBridgeFixture({
     hostKind: "edamame_posture",
     withMockSystemctl: true,
