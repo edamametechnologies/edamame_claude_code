@@ -204,8 +204,10 @@ function extractPaths(text, workspaceRoot) {
 
   function addPath(raw) {
     const cleaned = cleanTrailingPathJunk(raw);
-    const normalized = decodeFilePathToken(cleaned, workspaceRoot);
-    if (!normalized || seen.has(normalized)) return;
+    let normalized = decodeFilePathToken(cleaned, workspaceRoot);
+    if (!normalized) return;
+    normalized = normalized.replace(/\\/g, "/");
+    if (seen.has(normalized)) return;
     seen.add(normalized);
     paths.push(normalized);
   }
