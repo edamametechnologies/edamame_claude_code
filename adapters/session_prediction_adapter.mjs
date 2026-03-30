@@ -32,6 +32,7 @@ const SENSITIVE_PATH_PATTERNS = [
 
 const PATH_LIKE_REGEX = /(?:file:\/\/\/[^\s"'`)>]+|~\/[^\s"'`)>]+|\/[^\s"'`)>]+|[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.@-]+)+(?:\.[A-Za-z0-9_-]+)?)/g;
 const APP_BUNDLE_PATH_REGEX = /\/(?:[A-Za-z0-9_.@-]+\/)*[A-Za-z0-9_.@ ()-]+\.app\/Contents\/[A-Za-z0-9_.@ ()/-]*/g;
+const WINDOWS_DRIVE_PATH_REGEX = /[A-Za-z]:[\\\/][^\s"'`)\]>]+/g;
 const WINDOWS_SPACED_PATH_REGEX = /[A-Za-z]:\\(?:Program Files(?: \(x86\))?|ProgramData|Users\\[^\\]+\\AppData)(?:\\[A-Za-z0-9_.@ -]+)+/g;
 const URL_REGEX = /\bhttps?:\/\/[^\s"'`)>]+/g;
 const GIT_REMOTE_REGEX = /\bgit@([A-Za-z0-9.-]+):([^\s"'`)>]+)/g;
@@ -227,6 +228,7 @@ function extractPaths(text, workspaceRoot) {
     addPath(m[0]);
   }
 
+  for (const m of text.matchAll(WINDOWS_DRIVE_PATH_REGEX)) addPath(m[0]);
   for (const m of text.matchAll(WINDOWS_SPACED_PATH_REGEX)) addPath(m[0]);
 
   return paths;
