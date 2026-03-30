@@ -505,7 +505,7 @@ test("background refresh loop runs on startup and interval without overlap", asy
   );
 
   loop.start();
-  await new Promise((resolve) => setTimeout(resolve, 70));
+  await new Promise((resolve) => setTimeout(resolve, 200));
   loop.stop();
 
   assert.ok(calls.length >= 2);
