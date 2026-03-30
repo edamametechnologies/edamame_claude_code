@@ -5,7 +5,7 @@ usage() {
   cat <<'EOF'
 Usage: bash setup/install.sh [workspace_root]
 
-Installs the Claude Code EDAMAME package for the target workspace.
+Installs EDAMAME for Claude Code (global per-user install).
 Behavioral-model refresh is driven by Claude Code's stdio MCP lifecycle --
 the bridge refreshes on initialization and tool calls.
 EOF
@@ -163,7 +163,7 @@ def inject_mcp_entry(snippet_path, global_config_path):
     """Merge the rendered edamame MCP server entry into the global config."""
     try:
         snippet = json.loads(snippet_path.read_text(encoding="utf-8"))
-        entry = snippet.get("mcpServers", {}).get("edamame")
+        entry = snippet.get("mcpServers", {}).get("edamame-code")
         if entry is None:
             return
     except Exception:
@@ -181,7 +181,7 @@ def inject_mcp_entry(snippet_path, global_config_path):
         import shutil
 
         shutil.copy2(global_config_path, backup)
-    cfg.setdefault("mcpServers", {})["edamame"] = entry
+    cfg.setdefault("mcpServers", {})["edamame-code"] = entry
     global_config_path.parent.mkdir(parents=True, exist_ok=True)
     global_config_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
 
@@ -190,7 +190,7 @@ inject_mcp_entry(claude_code_mcp_path, Path.home() / ".claude.json")
 PY
 
 cat <<EOF
-Installed Claude Code EDAMAME package to:
+Installed EDAMAME for Claude Code to:
   $INSTALL_ROOT
 
 Primary config:

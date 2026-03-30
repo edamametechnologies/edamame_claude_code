@@ -24,8 +24,14 @@ const CONTROL_CENTER_REFRESH_NOW_TOOL_NAME = "edamame_claude_code_control_center
 const CONTROL_CENTER_APPLY_PAIRING_TOOL_NAME = "edamame_claude_code_control_center_apply_pairing";
 const CONTROL_CENTER_RUN_HOST_ACTION_TOOL_NAME = "edamame_claude_code_control_center_run_host_action";
 const CONTROL_CENTER_REQUEST_APP_PAIRING_TOOL_NAME = "edamame_claude_code_control_center_request_app_pairing";
+const REFRESH_TOOL_NAME = "claude_code_refresh_behavioral_model";
+const LEGACY_REFRESH_TOOL_NAME = "claude_code.refresh_behavioral_model";
+const HEALTHCHECK_TOOL_NAME = "claude_code_healthcheck";
+const LEGACY_HEALTHCHECK_TOOL_NAME = "claude_code.healthcheck";
+const POSTURE_SUMMARY_TOOL_NAME = "claude_code_posture_summary";
+const LEGACY_POSTURE_SUMMARY_TOOL_NAME = "claude_code.posture_summary";
 
-const TOOL_DEFINITIONS = [
+export const TOOL_DEFINITIONS = [
   {
     name: CONTROL_CENTER_TOOL_NAME,
     title: "Claude Code EDAMAME Control Center",
@@ -193,15 +199,11 @@ const TOOL_DEFINITIONS = [
           type: "string",
           description: "Local EDAMAME MCP endpoint, typically http://127.0.0.1:3000/mcp.",
         },
-        client_name: {
-          type: "string",
-          description: "Display name shown in the app approval dialog.",
-        },
       },
     },
   },
   {
-    name: "claude_code.refresh_behavioral_model",
+    name: REFRESH_TOOL_NAME,
     description:
       "Read recent Claude Code transcripts, forward raw reasoning sessions to EDAMAME, and let EDAMAME's configured LLM build and upsert the BehavioralWindow.",
     inputSchema: {
@@ -213,7 +215,7 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: "claude_code.healthcheck",
+    name: HEALTHCHECK_TOOL_NAME,
     description:
       "Check local Claude Code package configuration, EDAMAME MCP reachability, divergence-engine status, and behavioral-model presence.",
     inputSchema: {
@@ -225,7 +227,7 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: "claude_code.posture_summary",
+    name: POSTURE_SUMMARY_TOOL_NAME,
     description:
       "Return a compact summary of divergence verdict, engine status, score, todos, and suspicious sessions for the current workstation.",
     inputSchema: {
@@ -235,12 +237,12 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: "edamame.get_divergence_verdict",
+    name: "edamame_get_divergence_verdict",
     description: "Read the latest divergence verdict from EDAMAME Security.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
   {
-    name: "edamame.get_divergence_history",
+    name: "edamame_get_divergence_history",
     description: "Read rolling divergence verdict history from EDAMAME Security.",
     inputSchema: {
       type: "object",
@@ -251,17 +253,17 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: "edamame.get_divergence_engine_status",
+    name: "edamame_get_divergence_engine_status",
     description: "Read the current divergence-engine status from EDAMAME Security.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
   {
-    name: "edamame.get_behavioral_model",
+    name: "edamame_get_behavioral_model",
     description: "Read the currently stored BehavioralWindow from EDAMAME Security.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
   {
-    name: "edamame.get_score",
+    name: "edamame_get_score",
     description: "Read the current EDAMAME workstation score summary.",
     inputSchema: {
       type: "object",
@@ -276,7 +278,7 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: "edamame.get_sessions",
+    name: "edamame_get_sessions",
     description: "Read trimmed observed sessions from EDAMAME Security.",
     inputSchema: {
       type: "object",
@@ -288,35 +290,44 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: "edamame.get_anomalous_sessions",
+    name: "edamame_get_anomalous_sessions",
     description: "Read anomalous sessions from EDAMAME Security.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
   {
-    name: "edamame.get_blacklisted_sessions",
+    name: "edamame_get_blacklisted_sessions",
     description: "Read blacklisted sessions from EDAMAME Security.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
   {
-    name: "edamame.advisor_get_todos",
+    name: "edamame_advisor_get_todos",
     description: "Read prioritized security todos from EDAMAME Security.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
 ];
 
 const TOOL_NAME_MAP = {
+  "edamame_get_divergence_verdict": "get_divergence_verdict",
   "edamame.get_divergence_verdict": "get_divergence_verdict",
+  "edamame_get_divergence_history": "get_divergence_history",
   "edamame.get_divergence_history": "get_divergence_history",
+  "edamame_get_divergence_engine_status": "get_divergence_engine_status",
   "edamame.get_divergence_engine_status": "get_divergence_engine_status",
+  "edamame_get_behavioral_model": "get_behavioral_model",
   "edamame.get_behavioral_model": "get_behavioral_model",
+  "edamame_get_score": "get_score",
   "edamame.get_score": "get_score",
+  "edamame_get_sessions": "get_sessions",
   "edamame.get_sessions": "get_sessions",
+  "edamame_get_anomalous_sessions": "get_anomalous_sessions",
   "edamame.get_anomalous_sessions": "get_anomalous_sessions",
+  "edamame_get_blacklisted_sessions": "get_blacklisted_sessions",
   "edamame.get_blacklisted_sessions": "get_blacklisted_sessions",
+  "edamame_advisor_get_todos": "advisor_get_todos",
   "edamame.advisor_get_todos": "advisor_get_todos",
 };
 
-const RESOURCE_DEFINITIONS = [
+export const RESOURCE_DEFINITIONS = [
   {
     uri: CONTROL_CENTER_RESOURCE_URI,
     name: "Claude Code EDAMAME Control Center",
@@ -326,8 +337,9 @@ const RESOURCE_DEFINITIONS = [
   },
 ];
 
-const AUTO_REFRESH_EXEMPT_TOOLS = new Set([
-  "claude_code.refresh_behavioral_model",
+export const AUTO_REFRESH_EXEMPT_TOOLS = new Set([
+  REFRESH_TOOL_NAME,
+  LEGACY_REFRESH_TOOL_NAME,
   CONTROL_CENTER_REFRESH_TOOL_NAME,
   CONTROL_CENTER_REFRESH_NOW_TOOL_NAME,
   CONTROL_CENTER_APPLY_PAIRING_TOOL_NAME,
@@ -675,15 +687,15 @@ export async function dispatchToolCall(config, toolName, args = {}) {
     return requestAppPairing(config, args);
   }
 
-  if (toolName === "claude_code.refresh_behavioral_model") {
+  if (toolName === REFRESH_TOOL_NAME || toolName === LEGACY_REFRESH_TOOL_NAME) {
     return runLatestExtrapolation(config, { dryRun: args.dry_run === true });
   }
 
-  if (toolName === "claude_code.healthcheck") {
+  if (toolName === HEALTHCHECK_TOOL_NAME || toolName === LEGACY_HEALTHCHECK_TOOL_NAME) {
     return runHealthcheck(config, { strict: args.strict === true });
   }
 
-  if (toolName === "claude_code.posture_summary") {
+  if (toolName === POSTURE_SUMMARY_TOOL_NAME || toolName === LEGACY_POSTURE_SUMMARY_TOOL_NAME) {
     const snapshot = await readPostureSnapshot(config);
     return {
       summary: postureSummary(snapshot),

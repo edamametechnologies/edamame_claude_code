@@ -8,8 +8,8 @@ Claude Code (reasoning plane)        EDAMAME Security (system plane)
    | transcripts                          | live telemetry
    v                                      v
 +------------------+              +------------------+
-| Claude Code      |   MCP/HTTP   | Divergence       |
-| EDAMAME Plugin   | -----------> | Engine           |
+| EDAMAME for      |   MCP/HTTP   | Divergence       |
+| Claude Code      | -----------> | Engine           |
 | (this package)   |              | (internal)       |
 +------------------+              +------------------+
                                          |
@@ -32,6 +32,8 @@ Claude Code (reasoning plane)        EDAMAME Security (system plane)
 | Health check | `service/health.mjs` | Validate config, endpoint, engine, model |
 | Posture facade | `service/posture_facade.mjs` | Read-only EDAMAME posture/score wrapper |
 | Verdict reader | `service/verdict_reader.mjs` | Read-only divergence verdict facade |
+
+The [edamame_claude](https://github.com/edamametechnologies/edamame_claude) repository mirrors the client, control center HTML, posture facade, and skills listed above for reuse across Claude Code and Claude Desktop ([edamame_claude_desktop](https://github.com/edamametechnologies/edamame_claude_desktop)). This package currently embeds its own copies; shared imports are a later step.
 
 ## Data Flow
 

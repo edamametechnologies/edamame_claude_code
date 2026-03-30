@@ -840,6 +840,7 @@ export async function applyPairing(config, args = {}) {
 
 const PAIRING_POLL_INTERVAL_MS = 2000;
 const PAIRING_TIMEOUT_MS = 60_000;
+const APP_PAIRING_CLIENT_NAME = "EDAMAME for Claude Code";
 
 export async function requestAppPairing(config, args = {}) {
   const endpoint = String(args.endpoint || config.edamameMcpEndpoint || "").trim() || "http://127.0.0.1:3000/mcp";
@@ -847,7 +848,8 @@ export async function requestAppPairing(config, args = {}) {
   const pairUrl = `${baseUrl}/mcp/pair`;
 
   const body = {
-    client_name: String(args.client_name || config.clientName || "Claude Code EDAMAME Bridge").trim(),
+    // Keep the app-facing client label canonical even if the host passes extra tool arguments.
+    client_name: APP_PAIRING_CLIENT_NAME,
     agent_type: String(config.agentType || "claude_code"),
     agent_instance_id: String(config.agentInstanceId || "unknown"),
     requested_endpoint: endpoint,

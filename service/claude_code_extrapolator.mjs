@@ -402,7 +402,7 @@ export async function runLatestExtrapolation(config, options = {}) {
 
     await saveStateFn(config, "claude-code-extrapolator", {
       lastRunAt: new Date().toISOString(),
-      lastPayloadHash: result.rawPayloadHash,
+      lastPayloadHash: previousPayloadHash || null,
       lastWindowHash: previousWindowHash,
       lastSessionIds: result.sessionIds,
       lastReasons: result.reasons,
@@ -574,7 +574,7 @@ export async function runLatestExtrapolation(config, options = {}) {
 
     await saveStateFn(config, "claude-code-extrapolator", {
       lastRunAt: new Date().toISOString(),
-      lastPayloadHash: rawPayloadHash,
+      lastPayloadHash: previousPayloadHash || null,
       lastWindowHash: previousWindowHash,
       lastSessionIds: result.sessionIds,
       lastReasons: result.reasons,

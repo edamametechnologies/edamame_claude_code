@@ -41,8 +41,12 @@ permissions: read-all
 
 jobs:
   test:
-    name: Install and test
-    runs-on: ubuntu-latest
+    name: Install and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
 
@@ -60,7 +64,8 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install Claude Code
+      - name: Install Claude Code CLI
+        if: runner.os == 'Linux'
         run: |
           npm install -g @anthropic-ai/claude-code
           claude --version
@@ -68,10 +73,11 @@ jobs:
       - name: Validate plugin manifest
         run: |
           echo "--- Validating plugin manifest ---"
-          test -f .claude-plugin/plugin.json || { echo "FAIL: .claude-plugin/plugin.json not found"; exit 1; }
-          test -f .mcp.json || { echo "FAIL: .mcp.json not found"; exit 1; }
           node -e "
-            const m = JSON.parse(require('fs').readFileSync('.claude-plugin/plugin.json', 'utf8'));
+            const fs = require('fs');
+            if (!fs.existsSync('.claude-plugin/plugin.json')) { console.error('FAIL: .claude-plugin/plugin.json not found'); process.exit(1); }
+            if (!fs.existsSync('.mcp.json')) { console.error('FAIL: .mcp.json not found'); process.exit(1); }
+            const m = JSON.parse(fs.readFileSync('.claude-plugin/plugin.json', 'utf8'));
             console.log('Plugin name:', m.name);
             console.log('Plugin version:', m.version);
             console.log('MCP servers ref:', m.mcpServers);
@@ -81,6 +87,7 @@ jobs:
           echo "--- Plugin manifest valid ---"
 
       - name: Validate with Claude Code CLI
+        if: runner.os == 'Linux'
         run: |
           echo "--- Running Claude Code plugin validate ---"
           claude plugin validate . || { echo "FAIL: claude plugin validate failed"; exit 1; }
@@ -89,27 +96,35 @@ jobs:
       - name: Verify plugin structure
         run: |
           echo "--- Checking plugin file structure ---"
-          for f in \
-            bridge/claude_code_edamame_mcp.mjs \
-            bridge/edamame_client.mjs \
-            bridge/control_center_app.html \
-            adapters/session_prediction_adapter.mjs \
-            service/claude_code_extrapolator.mjs \
-            service/control_center.mjs \
-            service/health.mjs \
-            service/config.mjs \
-            setup/install.sh \
-            setup/healthcheck.sh \
-            skills/security-posture/SKILL.md \
-            skills/divergence-monitor/SKILL.md \
-            agents/security-monitor.md \
-            commands/healthcheck.md; do
-            test -f "$f" || { echo "FAIL: $f not found"; exit 1; }
-            echo "  OK: $f"
-          done
+          node -e "
+            const fs = require('fs');
+            const files = [
+              'bridge/claude_code_edamame_mcp.mjs',
+              'bridge/edamame_client.mjs',
+              'bridge/control_center_app.html',
+              'adapters/session_prediction_adapter.mjs',
+              'service/claude_code_extrapolator.mjs',
+              'service/control_center.mjs',
+              'service/health.mjs',
+              'service/config.mjs',
+              'setup/install.sh',
+              'setup/healthcheck.sh',
+              'skills/security-posture/SKILL.md',
+              'skills/divergence-monitor/SKILL.md',
+              'agents/security-monitor.md',
+              'commands/healthcheck.md',
+            ];
+            let ok = true;
+            for (const f of files) {
+              if (!fs.existsSync(f)) { console.error('FAIL: ' + f + ' not found'); ok = false; }
+              else { console.log('  OK: ' + f); }
+            }
+            if (!ok) process.exit(1);
+          "
           echo "--- Plugin structure valid ---"
 
       - name: Install plugin via marketplace
+        if: runner.os == 'Linux'
         run: |
           echo "--- Adding marketplace and installing plugin ---"
           claude plugin marketplace add edamametechnologies/edamame_claude_code
@@ -128,6 +143,7 @@ jobs:
           "
 
       - name: Verify plugin loads in Claude Code
+        if: runner.os == 'Linux'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
@@ -138,18 +154,27 @@ jobs:
           echo "$TOOLS" | grep -q "edamame_claude_code_control_center" || { echo "FAIL: control center tool not found"; exit 1; }
           echo "--- Plugin MCP tools verified ---"
 
-      - name: Run manual install
+      - name: Run manual install (Unix)
+        if: runner.os != 'Windows'
         run: |
           echo "--- Running manual install ---"
           bash setup/install.sh "$PWD"
           echo "--- Manual install completed ---"
 
+      - name: Run manual install (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          echo "--- Running manual install ---"
+          .\setup\install.ps1 -WorkspaceRoot "$PWD"
+          echo "--- Manual install completed ---"
+
       - name: Run unit tests
         run: npm test
 
-      - name: Verify MCP bridge exports
+      - name: Verify MCP bridge exports and tool contract
         run: |
-          echo "--- Verifying MCP bridge module exports ---"
+          echo "--- Verifying MCP bridge module exports and tool contract ---"
           node -e "
             import('./bridge/claude_code_edamame_mcp.mjs').then(m => {
               const fns = ['handleRequest', 'tryExtractMessages', 'createBackgroundRefreshLoop', 'createClaudeCodeDrivenRefresh'];
@@ -157,7 +182,26 @@ jobs:
                 if (typeof m[fn] !== 'function') { console.error('FAIL: missing export ' + fn); process.exit(1); }
                 console.log('  OK: ' + fn);
               }
-              console.log('Bridge exports check passed');
+              const toolNames = (m.TOOL_DEFINITIONS || []).map((tool) => tool.name);
+              const resourceUris = (m.RESOURCE_DEFINITIONS || []).map((resource) => resource.uri);
+              for (const toolName of [
+                'edamame_claude_code_control_center',
+                'edamame_claude_code_control_center_refresh',
+                'edamame_claude_code_control_center_refresh_now',
+                'claude_code_refresh_behavioral_model',
+                'claude_code_healthcheck',
+                'claude_code_posture_summary',
+                'edamame_get_divergence_verdict',
+                'edamame_get_score'
+              ]) {
+                if (!toolNames.includes(toolName)) { console.error('FAIL: missing tool ' + toolName); process.exit(1); }
+                console.log('  OK tool: ' + toolName);
+              }
+              if (!resourceUris.includes('ui://edamame/control-center.html')) {
+                console.error('FAIL: missing control center resource');
+                process.exit(1);
+              }
+              console.log('Bridge contract check passed');
             }).catch(e => { console.error('FAIL:', e.message); process.exit(1); });
           "
           echo "--- MCP bridge verification complete ---"
@@ -168,7 +212,7 @@ jobs:
         with:
           channel-id: "C072J0U9TH7"
           slack-message: |
-            *edamame_claude_code CI Failed*
+            *edamame_claude_code CI Failed (${{ matrix.os }})*
             Repository: ${{ github.repository }}
             Branch: ${{ github.ref }}
             Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}

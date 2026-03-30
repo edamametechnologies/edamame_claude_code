@@ -102,26 +102,37 @@ export const DEFAULT_CONFIG = Object.freeze({
   ],
   scopeProcessPaths: [],
   scopeParentPaths: [
-    // Claude Code CLI (macOS/Linux: native installer, Homebrew, npm)
+    // Claude Code CLI + embedded Node (Unix-style separators)
     "*/claude",
     "*/claude-code",
     "*/bin/claude",
+    "/usr/bin/claude",
+    "/usr/local/bin/claude",
     "*/node",
     "*/node_modules/.bin/claude",
-    // Claude Code Desktop app (macOS .app bundle)
-    "*/Claude.app/Contents/MacOS/Claude",
-    "*/Claude.app/Contents/MacOS/*",
-    // Claude Code Desktop app (Windows: Programs, WindowsApps, MSIX)
-    "*/Claude/Claude.exe",
-    "*/Claude.exe",
-    "*/WindowsApps/Claude*",
-    "*/Program Files/WindowsApps/Claude*",
-    "*/node.exe",
-    // Claude Code Desktop app (Linux: /opt, .local)
-    "/opt/claude*",
-    "*/.local/share/claude*",
     "*/.local/bin/claude",
-    // MCP bridge script spawned by the Claude Code package
+    "*/.nvm/",
+    "*/.volta/",
+    // Same as above for Windows L7 paths (backslashes; see divergence_engine rule_matches)
+    "*\\claude.exe",
+    "*\\claude.cmd",
+    "*\\bin\\claude",
+    "*\\node.exe",
+    "*\\node_modules\\.bin\\claude",
+    "*\\.local\\bin\\claude",
+    // Standalone / Store / per-user installs (Claude.exe)
+    "*/windowsapps/",
+    "*\\windowsapps\\",
+    "*/appdata/local/programs/claude",
+    "*\\appdata\\local\\programs\\claude",
+    "*/program files/claude",
+    "*\\program files\\claude",
+    // Linux: snap, flatpak, Nix
+    "/snap/bin/claude",
+    "*/snap/claude/",
+    "*/flatpak/",
+    "*/nix/store/",
+    // MCP bridge
     "*/claude_code_edamame_mcp.mjs",
   ],
   scopeGrandparentPaths: [],

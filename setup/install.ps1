@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Installs the Claude Code EDAMAME package for a target workspace on Windows.
+    Installs EDAMAME for Claude Code (global per-user install) on Windows.
 
 .DESCRIPTION
     PowerShell equivalent of setup/install.sh for Windows environments.
@@ -103,7 +103,7 @@ if (Test-Path $McpTemplate) {
 $GlobalMcpPath = Join-Path $env:USERPROFILE ".claude.json"
 try {
     $SnippetContent = Get-Content -Raw $ClaudeCodeMcpPath | ConvertFrom-Json
-    $Entry = $SnippetContent.mcpServers.edamame
+    $Entry = $SnippetContent.mcpServers.'edamame-code'
     if ($Entry) {
         if (Test-Path $GlobalMcpPath) {
             Copy-Item -Force $GlobalMcpPath "$GlobalMcpPath.bak"
@@ -120,10 +120,10 @@ try {
             if (-not $GlobalCfg.PSObject.Properties["mcpServers"]) {
                 $GlobalCfg | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{})
             }
-            if ($GlobalCfg.mcpServers.PSObject.Properties["edamame"]) {
-                $GlobalCfg.mcpServers.edamame = $Entry
+            if ($GlobalCfg.mcpServers.PSObject.Properties["edamame-code"]) {
+                $GlobalCfg.mcpServers.'edamame-code' = $Entry
             } else {
-                $GlobalCfg.mcpServers | Add-Member -NotePropertyName "edamame" -NotePropertyValue $Entry
+                $GlobalCfg.mcpServers | Add-Member -NotePropertyName "edamame-code" -NotePropertyValue $Entry
             }
             $GlobalDir = Split-Path -Parent $GlobalMcpPath
             if ($GlobalDir -and -not (Test-Path $GlobalDir)) { New-Item -ItemType Directory -Path $GlobalDir -Force | Out-Null }
@@ -136,7 +136,7 @@ try {
 
 Write-Host @"
 
-Installed Claude Code EDAMAME package to:
+Installed EDAMAME for Claude Code to:
   $InstallRoot
 
 Primary config:

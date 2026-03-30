@@ -52,8 +52,13 @@ For environments where the marketplace is not available:
 ```bash
 git clone https://github.com/edamametechnologies/edamame_claude_code.git
 cd edamame_claude_code
-bash setup/install.sh /path/to/your/workspace
+bash setup/install.sh [/path/to/your/workspace]
 ```
+
+The workspace argument is **optional**. It seeds `transcript_project_hints`
+and `agent_instance_id`. When omitted, the plugin monitors transcripts from
+all workspaces. The install is **global per-user** -- no need to reinstall
+when switching projects.
 
 2. **Restart Claude Code**, then run `/edamame:healthcheck` to verify.
 
@@ -114,6 +119,12 @@ bash setup/healthcheck.sh --strict --json
 | `docs/` | Architecture, setup, operator guidance |
 | `tests/` | Unit tests and [E2E intent injection](E2E_TESTS.md) |
 
+## Shared components
+
+[edamame_claude](https://github.com/edamametechnologies/edamame_claude) is a sibling repository that holds shared copies of `bridge/edamame_client.mjs`, `bridge/control_center_app.html`, `service/posture_facade.mjs`, and the `security-posture` and `divergence-monitor` skills. This plugin still ships those files in-tree; consolidating on imports from the shared library (npm package or relative symlinks) is planned as a follow-up.
+
+[edamame_claude_desktop](https://github.com/edamametechnologies/edamame_claude_desktop) is the Claude Desktop integration package built on the same shared surface.
+
 ## Distribution Channels
 
 | Channel | How | Friction |
@@ -128,6 +139,7 @@ bash setup/healthcheck.sh --strict --json
 
 - [Setup Guide](docs/SETUP.md) -- install, config paths, pairing, health checks
 - [Architecture](docs/ARCHITECTURE.md) -- component mapping and runtime flow
+- [Validation Matrix](docs/VALIDATION.md) -- local, CI, and E2E verification coverage
 
 ## Behavioral Model Contract
 

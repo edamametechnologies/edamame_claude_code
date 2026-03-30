@@ -252,12 +252,20 @@ test("handleRequest returns MCP initialize and tool list responses", async () =>
     params: {},
   });
   assert.ok(
-    toolsResponse.result.tools.some((tool) => tool.name === "claude_code.refresh_behavioral_model"),
+    toolsResponse.result.tools.some((tool) => tool.name === "claude_code_refresh_behavioral_model"),
   );
   const controlCenterTool = toolsResponse.result.tools.find(
     (tool) => tool.name === "edamame_claude_code_control_center",
   );
   assert.ok(controlCenterTool, "control center tool should be defined");
+  const appPairingTool = toolsResponse.result.tools.find(
+    (tool) => tool.name === "edamame_claude_code_control_center_request_app_pairing",
+  );
+  assert.ok(appPairingTool, "app pairing tool should be defined");
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(appPairingTool.inputSchema?.properties || {}, "client_name"),
+    false,
+  );
   assert.equal(
     toolsResponse.result.tools.some((tool) => tool.name === "edamame_claude_code_control_center_apply_pairing"),
     true,
@@ -266,6 +274,10 @@ test("handleRequest returns MCP initialize and tool list responses", async () =>
     toolsResponse.result.tools.some((tool) => tool.name === "edamame_claude_code_control_center_run_host_action"),
     true,
   );
+  const invalidToolNames = toolsResponse.result.tools
+    .map((tool) => tool.name)
+    .filter((name) => !/^[a-zA-Z0-9_-]{1,64}$/.test(name));
+  assert.deepEqual(invalidToolNames, []);
 });
 
 test("tryExtractMessages accepts LF-only framed MCP messages", () => {
@@ -315,7 +327,7 @@ test("bridge can dispatch dry-run extrapolation and healthcheck tools", async ()
     id: 3,
     method: "tools/call",
     params: {
-      name: "claude_code.refresh_behavioral_model",
+      name: "claude_code_refresh_behavioral_model",
       arguments: { dry_run: true },
     },
   });
@@ -334,7 +346,7 @@ test("bridge can dispatch dry-run extrapolation and healthcheck tools", async ()
     id: 4,
     method: "tools/call",
     params: {
-      name: "claude_code.healthcheck",
+      name: "claude_code_healthcheck",
       arguments: { strict: true },
     },
   });
@@ -370,6 +382,67 @@ test("control center pairing stores PSK and updates config", async () => {
   assert.equal(storedConfig.edamame_mcp_psk_file, config.edamameMcpPskFile);
   assert.equal(payload.pairing.configured, true);
   assert.equal(payload.config.hostKind, "edamame_posture");
+});
+
+test("control center app pairing keeps the canonical Claude Code client name", async () => {
+  const requestId = "req-app-pair";
+  const credential = "edm_mcp_testcredential";
+  const pairingBodies = [];
+  const server = http.createServer(async (request, response) => {
+    if (request.method === "POST" && request.url === "/mcp/pair") {
+      const chunks = [];
+      for await (const chunk of request) {
+        chunks.push(chunk);
+      }
+      pairingBodies.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ request_id: requestId }));
+      return;
+    }
+
+    if (request.method === "GET" && request.url === `/mcp/pair/${requestId}`) {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ status: "approved", credential }));
+      return;
+    }
+
+    response.writeHead(404, { "Content-Type": "text/plain" });
+    response.end("not found");
+  });
+
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const endpoint = `http://127.0.0.1:${address.port}/mcp`;
+  const config = await makeBridgeFixture({ withPsk: false, endpoint });
+
+  try {
+    const response = await handleRequest(config, {
+      jsonrpc: "2.0",
+      id: 10.5,
+      method: "tools/call",
+      params: {
+        name: "edamame_claude_code_control_center_request_app_pairing",
+        arguments: {
+          endpoint,
+          client_name: "Claude Code",
+        },
+      },
+    });
+
+    const payload = response.result.structuredContent;
+    const storedPsk = await fs.readFile(config.edamameMcpPskFile, "utf8");
+
+    assert.equal(storedPsk.trim(), credential);
+    assert.equal(payload.pairingMethod, "app_mediated");
+    assert.equal(pairingBodies.length, 1);
+    assert.equal(pairingBodies[0].client_name, "EDAMAME for Claude Code");
+    assert.equal(pairingBodies[0].agent_type, "claude_code");
+    assert.equal(pairingBodies[0].agent_instance_id, "claude-code-bridge-test");
+    assert.equal(pairingBodies[0].requested_endpoint, endpoint);
+    assert.equal(pairingBodies[0].workspace_hint, config.workspaceRoot);
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
 });
 
 test("control center can auto-pair a local posture host", async () => {
@@ -581,7 +654,7 @@ test("handleRequest uses Claude Code lifecycle refresh hooks", async () => {
       id: 6,
       method: "tools/call",
       params: {
-        name: "claude_code.healthcheck",
+        name: "claude_code_healthcheck",
         arguments: { strict: false },
       },
     },
@@ -591,7 +664,7 @@ test("handleRequest uses Claude Code lifecycle refresh hooks", async () => {
   assert.deepEqual(calls, [
     { type: "kick", trigger: "notifications_initialized" },
     { type: "kick", trigger: "tools_list" },
-    { type: "maybeRun", trigger: "tool_call:claude_code.healthcheck" },
+    { type: "maybeRun", trigger: "tool_call:claude_code_healthcheck" },
   ]);
 });
 
@@ -635,7 +708,7 @@ test("handleRequest skips lifecycle refresh for explicit refresh tool", async ()
       id: 7,
       method: "tools/call",
       params: {
-        name: "claude_code.refresh_behavioral_model",
+        name: "claude_code_refresh_behavioral_model",
         arguments: { dry_run: true },
       },
     },
@@ -1015,6 +1088,7 @@ test("runLatestExtrapolation returns structured failure when EDAMAME MCP is unre
       rawPayloadHash: "payload-unreachable",
     }),
     loadState: async () => ({
+      lastPayloadHash: "payload-previous",
       lastWindowHash: "window-previous",
     }),
     saveState: async (_cfg, _name, value) => {
@@ -1034,6 +1108,7 @@ test("runLatestExtrapolation returns structured failure when EDAMAME MCP is unre
   assert.equal(result.attemptCount, 1);
   assert.equal(result.retryCount, 0);
   assert.equal(savedStates.length, 1);
+  assert.equal(savedStates[0].lastPayloadHash, "payload-previous");
   assert.equal(savedStates[0].lastWindowHash, "window-previous");
   assert.equal(savedStates[0].lastError, "fetch failed");
 });
@@ -1170,7 +1245,10 @@ test("runLatestExtrapolation returns structured failure after repeated parse fai
       },
       rawPayloadHash: "payload-parse-failure",
     }),
-    loadState: async () => ({}),
+    loadState: async () => ({
+      lastPayloadHash: "payload-previous",
+      lastWindowHash: "window-previous",
+    }),
     saveState: async (_cfg, _name, value) => {
       savedStates.push(value);
     },
@@ -1193,6 +1271,8 @@ test("runLatestExtrapolation returns structured failure after repeated parse fai
   assert.match(result.error, /Unable to parse behavioral model JSON from LLM response/);
   assert.equal(rawIngestAttempts, 3);
   assert.equal(savedStates.length, 1);
+  assert.equal(savedStates[0].lastPayloadHash, "payload-previous");
+  assert.equal(savedStates[0].lastWindowHash, "window-previous");
   assert.equal(savedStates[0].lastAttemptCount, 3);
   assert.equal(savedStates[0].lastRetryCount, 2);
 });

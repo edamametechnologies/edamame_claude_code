@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "edamame": {
+    "edamame-code": {
       "type": "stdio",
       "command": "__NODE_BIN__",
       "args": [

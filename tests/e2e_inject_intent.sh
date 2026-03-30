@@ -212,9 +212,11 @@ ok = any('edamame' in k.lower() for k in plugins.keys())
 raise SystemExit(0 if ok else 1)
 " 2>/dev/null; then
     echo "OK: Claude Code settings show an edamame plugin entry"
+  elif [[ -f "$MCP_SNIPPET_PATH" ]]; then
+    echo "OK: using local MCP snippet $MCP_SNIPPET_PATH (settings.json has no enabled edamame plugin entry)"
   else
-    echo "FAIL: ~/.claude/settings.json has no enabledPlugins key containing 'edamame'" >&2
-    echo "      Install the EDAMAME plugin from marketplace or set E2E_SKIP_PLUGIN_CHECK=1" >&2
+    echo "FAIL: ~/.claude/settings.json has no enabledPlugins key containing 'edamame' and no MCP snippet at $MCP_SNIPPET_PATH" >&2
+    echo "      Install the EDAMAME plugin from marketplace or run setup/install.sh" >&2
     exit 1
   fi
 else
