@@ -296,6 +296,19 @@ export async function runLatestExtrapolation(config, options = {}) {
 
     const now = new Date();
     const windowMinutes = config.transcriptActiveWindowMinutes || 5;
+    const priorPredictions = previousState?.lastGeneratedWindow?.predictions ?? [];
+    const carryForwardNotExpected = {
+      traffic: [...new Set(priorPredictions.flatMap((p) => p.not_expected_traffic || []))],
+      sensitive_files: [...new Set(priorPredictions.flatMap((p) => p.not_expected_sensitive_files || []))],
+      lan_devices: [...new Set(priorPredictions.flatMap((p) => p.not_expected_lan_devices || []))],
+      local_open_ports: [...new Set(priorPredictions.flatMap((p) => p.not_expected_local_open_ports || []))],
+      process_paths: [...new Set(priorPredictions.flatMap((p) => p.not_expected_process_paths || []))],
+      parent_paths: [...new Set(priorPredictions.flatMap((p) => p.not_expected_parent_paths || []))],
+      grandparent_paths: [...new Set(priorPredictions.flatMap((p) => p.not_expected_grandparent_paths || []))],
+      open_files: [...new Set(priorPredictions.flatMap((p) => p.not_expected_open_files || []))],
+      l7_protocols: [...new Set(priorPredictions.flatMap((p) => p.not_expected_l7_protocols || []))],
+      system_config: [...new Set(priorPredictions.flatMap((p) => p.not_expected_system_config || []))],
+    };
     const heartbeatWindow = {
       window_start: new Date(now.getTime() - windowMinutes * 60_000).toISOString(),
       window_end: now.toISOString(),
@@ -323,16 +336,16 @@ export async function runLatestExtrapolation(config, options = {}) {
           expected_open_files: [],
           expected_l7_protocols: ["https"],
           expected_system_config: [],
-          not_expected_traffic: [],
-          not_expected_sensitive_files: [],
-          not_expected_lan_devices: [],
-          not_expected_local_open_ports: [],
-          not_expected_process_paths: [],
-          not_expected_parent_paths: [],
-          not_expected_grandparent_paths: [],
-          not_expected_open_files: [],
-          not_expected_l7_protocols: [],
-          not_expected_system_config: [],
+          not_expected_traffic: carryForwardNotExpected.traffic,
+          not_expected_sensitive_files: carryForwardNotExpected.sensitive_files,
+          not_expected_lan_devices: carryForwardNotExpected.lan_devices,
+          not_expected_local_open_ports: carryForwardNotExpected.local_open_ports,
+          not_expected_process_paths: carryForwardNotExpected.process_paths,
+          not_expected_parent_paths: carryForwardNotExpected.parent_paths,
+          not_expected_grandparent_paths: carryForwardNotExpected.grandparent_paths,
+          not_expected_open_files: carryForwardNotExpected.open_files,
+          not_expected_l7_protocols: carryForwardNotExpected.l7_protocols,
+          not_expected_system_config: carryForwardNotExpected.system_config,
         },
       ],
       contributors: [],

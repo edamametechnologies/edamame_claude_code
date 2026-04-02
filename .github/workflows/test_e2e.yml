@@ -420,6 +420,9 @@ jobs:
           SCENARIOS_PASS=0
           SCENARIOS_FAIL=0
           SCENARIOS_SKIP=0
+          SCENARIOS_HARD_FAIL=0
+          DIVERGENCE_MODEL_MIN_AGE_SECS=65
+          DIVERGENCE_AGENT_INSTANCE_ID="e2e-divergence-ci-${AGENT_TYPE}-${GITHUB_RUN_ID:-local}"
 
           check_sessions() {
             local target_desc="$1"
@@ -454,6 +457,185 @@ jobs:
             return $?
           }
 
+          ensure_divergence_harness_ready() {
+            EDAMAME_CLI_BIN="$CLI" TRIGGERS_PATH="$TRIGGERS_DIR" AGENT_TYPE="$AGENT_TYPE" \
+              DIVERGENCE_AGENT_INSTANCE_ID="$DIVERGENCE_AGENT_INSTANCE_ID" python3 - <<'PY'
+          import datetime, json, os, sys
+
+          sys.path.insert(0, os.environ['TRIGGERS_PATH'])
+          from _edamame_cli import cli_rpc
+
+          agent_type = os.environ['AGENT_TYPE']
+          agent_instance_id = os.environ['DIVERGENCE_AGENT_INSTANCE_ID']
+          cli_rpc('start_divergence_engine', '[true, 300]')
+
+          now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+          blocked_traffic = [f'one.one.one.one:{port}' for port in range(63169, 63177)]
+          blocked_traffic += [f'1.0.0.1:{port}' for port in range(63169, 63177)]
+          blocked_traffic += [f'one.one.one.one:{port}' for port in range(63200, 63215)]
+          blocked_traffic += [f'1.1.1.1:{port}' for port in range(63200, 63215)]
+          window = {
+              'window_start': (now - datetime.timedelta(minutes=5)).isoformat().replace('+00:00', 'Z'),
+              'window_end': (now - datetime.timedelta(minutes=4)).isoformat().replace('+00:00', 'Z'),
+              'agent_type': agent_type,
+              'agent_instance_id': agent_instance_id,
+              'predictions': [
+                  {
+                      'agent_type': agent_type,
+                      'agent_instance_id': agent_instance_id,
+                      'session_key': 'e2e_divergence_probe_scope',
+                      'action': 'Workflow divergence probe scope',
+                      'tools_called': ['run'],
+                      'scope_process_paths': ['*/divergence_probe'],
+                      'scope_parent_paths': [],
+                      'scope_grandparent_paths': [],
+                      'scope_any_lineage_paths': [],
+                      'expected_traffic': ['api.anthropic.com:443'],
+                      'expected_sensitive_files': [],
+                      'expected_lan_devices': [],
+                      'expected_local_open_ports': [],
+                      'expected_process_paths': ['*/divergence_probe'],
+                      'expected_parent_paths': [],
+                      'expected_grandparent_paths': [],
+                      'expected_open_files': [],
+                      'expected_l7_protocols': [],
+                      'expected_system_config': [],
+                      'not_expected_traffic': blocked_traffic,
+                      'not_expected_sensitive_files': [],
+                      'not_expected_lan_devices': [],
+                      'not_expected_local_open_ports': [],
+                      'not_expected_process_paths': [],
+                      'not_expected_parent_paths': [],
+                      'not_expected_grandparent_paths': [],
+                      'not_expected_open_files': [],
+                      'not_expected_l7_protocols': [],
+                      'not_expected_system_config': [],
+                      'raw_input': None,
+                  }
+              ],
+              'contributors': [],
+              'version': 'e2e/divergence-probe',
+              'hash': '',
+              'ingested_at': now.isoformat().replace('+00:00', 'Z'),
+          }
+
+          cli_rpc('clear_divergence_state')
+          cli_rpc('clear_divergence_history')
+          cli_rpc('upsert_behavioral_model', json.dumps({'window_json': json.dumps(window)}))
+          status = cli_rpc('get_divergence_engine_status')
+          print(json.dumps(status))
+          PY
+          }
+
+          wait_for_divergence_model_ready() {
+            local waited=0
+            local max_wait=$((DIVERGENCE_MODEL_MIN_AGE_SECS + 60))
+            while ((waited <= max_wait)); do
+              local status
+              status="$(EDAMAME_CLI_BIN="$CLI" TRIGGERS_PATH="$TRIGGERS_DIR" python3 -c "
+          import os, sys
+          sys.path.insert(0, os.environ['TRIGGERS_PATH'])
+          from _edamame_cli import cli_rpc
+          s = cli_rpc('get_divergence_engine_status')
+          age = s.get('model_age_secs') if isinstance(s, dict) else 0
+          contrib = s.get('contributor_count') if isinstance(s, dict) else 0
+          running = bool(s.get('running')) if isinstance(s, dict) else False
+          print(f'{int(age or 0)}|{int(contrib or 0)}|{1 if running else 0}')
+          " 2>/dev/null || echo "0|0|0")"
+              local age="${status%%|*}"
+              local rest="${status#*|}"
+              local contrib="${rest%%|*}"
+              local running="${rest#*|}"
+              if [[ "$running" -eq 1 && "$contrib" -gt 0 && "$age" -ge "$DIVERGENCE_MODEL_MIN_AGE_SECS" ]]; then
+                return 0
+              fi
+              echo "  divergence model warming: running=$running contributors=$contrib age=${age}s"
+              sleep 5
+              waited=$((waited + 5))
+            done
+            return 1
+          }
+
+          check_divergence_semantics() {
+            local scenario="$1"
+            "$CLI" rpc debug_run_divergence_tick >/dev/null 2>&1 || true
+            EDAMAME_CLI_BIN="$CLI" TRIGGERS_PATH="$TRIGGERS_DIR" python3 - "$scenario" "$DIVERGENCE_MODEL_MIN_AGE_SECS" <<'PY'
+          import os, sys
+
+          sys.path.insert(0, os.environ['TRIGGERS_PATH'])
+          from _edamame_cli import cli_rpc
+
+          scenario = sys.argv[1].strip()
+          min_age = int(sys.argv[2])
+          expected_prefix = {
+              'divergence': '1.0.0.1:',
+              'goal_drift': '1.1.1.1:',
+          }.get(scenario)
+
+          summary = cli_rpc('get_divergence_verdict')
+          status = cli_rpc('get_divergence_engine_status')
+          sessions = cli_rpc('get_current_sessions')
+
+          probe_active = 0
+          for session in sessions if isinstance(sessions, list) else []:
+              if not isinstance(session, dict):
+                  continue
+              l7 = session.get('l7') or {}
+              process_path = str(l7.get('process_path') or '')
+              active = bool((session.get('status') or {}).get('active'))
+              if process_path.endswith('/divergence_probe') and active:
+                  probe_active += 1
+
+          verdict = str(summary.get('verdict') or '').strip().upper()
+          decision_source = str(summary.get('decision_source') or '').strip()
+          trace_available = summary.get('trace_available')
+          entry_id = str(summary.get('entry_id') or '').strip()
+          evidence = summary.get('evidence') or []
+          categories = sorted(
+              {
+                  str(item.get('category') or '').strip()
+                  for item in evidence
+                  if isinstance(item, dict) and str(item.get('category') or '').strip()
+              }
+          )
+          descriptions = [
+              str(item.get('description') or '')
+              for item in evidence
+              if isinstance(item, dict)
+          ]
+
+          running = bool(status.get('running')) if isinstance(status, dict) else False
+          contributors = int(status.get('contributor_count') or 0) if isinstance(status, dict) else 0
+          age = int(status.get('model_age_secs') or 0) if isinstance(status, dict) else 0
+
+          ok = all(
+              [
+                  verdict == 'DIVERGENCE',
+                  probe_active > 0,
+                  running,
+                  contributors > 0,
+                  age >= min_age,
+                  'correlation:not_expected' in categories,
+                  bool(decision_source),
+                  isinstance(trace_available, bool),
+                  (not expected_prefix) or any(expected_prefix in description for description in descriptions),
+              ]
+          )
+
+          message = (
+              f'verdict={verdict or "NONE"} probe_active={probe_active} '
+              f'model_age={age}s contributors={contributors} running={int(running)} '
+              f'decision_source={decision_source or "NONE"} '
+              f'trace_available={trace_available} '
+              f'categories={",".join(categories) if categories else "none"} '
+              f'entry_id={entry_id or "missing"}'
+          )
+
+          print(message)
+          sys.exit(0 if ok else 1)
+          PY
+          }
+
           run_scenario() {
             local name="$1"
             local script="trigger_${name}.py"
@@ -469,6 +651,26 @@ jobs:
             echo "=========================================="
             echo "SCENARIO: $name"
             echo "=========================================="
+
+            local REQUIRE_SEMANTICS=0
+            local SEMANTIC_OK=1
+            if [[ "$name" == "divergence" || "$name" == "goal_drift" ]]; then
+              REQUIRE_SEMANTICS=1
+              echo "--- Seeding divergence harness model ---"
+              if ! ensure_divergence_harness_ready; then
+                echo "FAIL: $name - divergence harness model seed failed"
+                SCENARIOS_FAIL=$((SCENARIOS_FAIL + 1))
+                SCENARIOS_HARD_FAIL=$((SCENARIOS_HARD_FAIL + 1))
+                return 0
+              fi
+              echo "--- Waiting for divergence model readiness ---"
+              if ! wait_for_divergence_model_ready; then
+                echo "FAIL: $name - divergence harness model did not become ready"
+                SCENARIOS_FAIL=$((SCENARIOS_FAIL + 1))
+                SCENARIOS_HARD_FAIL=$((SCENARIOS_HARD_FAIL + 1))
+                return 0
+              fi
+            fi
 
             echo "--- Starting trigger (${TRIGGER_DURATION}s) ---"
             python3 "$TRIGGERS_DIR/$script" \
@@ -492,6 +694,13 @@ jobs:
               sleep "$POLL_INTERVAL"
             done
 
+            if [[ "$FOUND" -eq 1 && "$REQUIRE_SEMANTICS" -eq 1 ]]; then
+              echo "--- Checking divergence verdict semantics ---"
+              if ! check_divergence_semantics "$name"; then
+                SEMANTIC_OK=0
+              fi
+            fi
+
             echo "--- Stopping trigger ---"
             kill "$TPID" 2>/dev/null || true
             wait "$TPID" 2>/dev/null || true
@@ -499,9 +708,13 @@ jobs:
             echo "--- Running cleanup ---"
             python3 "$TRIGGERS_DIR/cleanup.py" --agent-type "$AGENT_TYPE" 2>/dev/null || true
 
-            if [ "$FOUND" -eq 1 ]; then
+            if [[ "$FOUND" -eq 1 && "$SEMANTIC_OK" -eq 1 ]]; then
               echo "PASS: $name - session detected"
               SCENARIOS_PASS=$((SCENARIOS_PASS + 1))
+            elif [[ "$REQUIRE_SEMANTICS" -eq 1 ]]; then
+              echo "FAIL: $name - divergence semantics not satisfied"
+              SCENARIOS_FAIL=$((SCENARIOS_FAIL + 1))
+              SCENARIOS_HARD_FAIL=$((SCENARIOS_HARD_FAIL + 1))
             else
               echo "WARN: $name - no session detected (non-fatal in CI)"
               SCENARIOS_FAIL=$((SCENARIOS_FAIL + 1))
@@ -538,9 +751,13 @@ jobs:
           echo "  PASS: $SCENARIOS_PASS"
           echo "  WARN: $SCENARIOS_FAIL"
           echo "  SKIP: $SCENARIOS_SKIP"
+          echo "  HARD_FAIL: $SCENARIOS_HARD_FAIL"
           echo "=========================================="
 
           python3 "$TRIGGERS_DIR/cleanup.py" --agent-type "$AGENT_TYPE" 2>/dev/null || true
+          if [ "$SCENARIOS_HARD_FAIL" -gt 0 ]; then
+            exit 1
+          fi
 
       # ── Stop MCP server ─────────────────────────────────────────
 
