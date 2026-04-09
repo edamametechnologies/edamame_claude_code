@@ -585,8 +585,14 @@ jobs:
           }.get(scenario)
 
           summary = cli_rpc('get_divergence_verdict')
+          if isinstance(summary, str):
+              summary = json.loads(summary)
           status = cli_rpc('get_divergence_engine_status')
+          if isinstance(status, str):
+              status = json.loads(status)
           sessions = cli_rpc('get_current_sessions')
+          if isinstance(sessions, str):
+              sessions = json.loads(sessions)
 
           probe_active = 0
           for session in sessions if isinstance(sessions, list) else []:
