@@ -107,7 +107,7 @@ async function walkFiles(rootDir, results = []) {
       await walkFiles(fullPath, results);
       continue;
     }
-    if ((entry.name.endsWith(".jsonl") || entry.name.endsWith(".txt")) && isLikelyTranscriptFile(entry.name)) {
+    if (entry.name.endsWith(".jsonl") || entry.name.endsWith(".txt")) {
       results.push(fullPath);
     }
   }

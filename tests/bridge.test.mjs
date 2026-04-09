@@ -264,7 +264,7 @@ test("handleRequest returns MCP initialize and tool list responses", async () =>
   assert.ok(appPairingTool, "app pairing tool should be defined");
   assert.equal(
     Object.prototype.hasOwnProperty.call(appPairingTool.inputSchema?.properties || {}, "client_name"),
-    false,
+    true,
   );
   assert.equal(
     toolsResponse.result.tools.some((tool) => tool.name === "edamame_claude_code_control_center_apply_pairing"),
@@ -435,7 +435,7 @@ test("control center app pairing keeps the canonical Claude Code client name", a
     assert.equal(storedPsk.trim(), credential);
     assert.equal(payload.pairingMethod, "app_mediated");
     assert.equal(pairingBodies.length, 1);
-    assert.equal(pairingBodies[0].client_name, "EDAMAME for Claude Code");
+    assert.equal(pairingBodies[0].client_name, "Claude Code");
     assert.equal(pairingBodies[0].agent_type, "claude_code");
     assert.equal(pairingBodies[0].agent_instance_id, "claude-code-bridge-test");
     assert.equal(pairingBodies[0].requested_endpoint, endpoint);
