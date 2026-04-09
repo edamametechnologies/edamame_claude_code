@@ -100,7 +100,9 @@ Default state directory:
 - Linux: `~/.local/state/claude-code-edamame`
 
 The default local credential file lives inside the package state directory as
-`edamame-mcp.psk`.
+`edamame-mcp.psk`. This file should be readable only by the owning user
+(mode `0600` on Unix). Avoid world-readable permissions, as the PSK grants
+full access to the local EDAMAME MCP endpoint.
 
 Key fields:
 
