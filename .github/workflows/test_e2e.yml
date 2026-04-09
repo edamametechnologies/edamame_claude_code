@@ -427,33 +427,33 @@ jobs:
           check_sessions() {
             local target_desc="$1"
             "$CLI" rpc get_current_sessions 2>/dev/null | python3 - "$target_desc" <<'PYSESS'
-import json, sys
-raw = sys.stdin.read().strip()
-if raw.startswith('Result: '):
-    raw = raw[len('Result: '):]
-if not raw or raw == 'null':
-    print('  total_sessions=0')
-    sys.exit(1)
-try:
-    data = json.loads(raw)
-    if isinstance(data, str):
-        data = json.loads(data)
-except Exception as e:
-    print(f'  sessions: parse error: {e}')
-    print(f'  raw_prefix: {raw[:200]}')
-    sys.exit(1)
-sessions = data if isinstance(data, list) else data.get('sessions', [])
-print(f'  total_sessions={len(sessions)}')
-target = sys.argv[1]
-matched = [s.get('dst_addr','') + ':' + str(s.get('dst_port','')) for s in sessions if target in json.dumps(s)]
-if matched:
-    print(f'  matched: {matched[:5]}')
-    sys.exit(0)
-dst_sample = [s.get('dst_addr','') + ':' + str(s.get('dst_port','')) for s in sessions[:10]]
-if dst_sample:
-    print(f'  sample_destinations: {dst_sample}')
-sys.exit(1)
-PYSESS
+          import json, sys
+          raw = sys.stdin.read().strip()
+          if raw.startswith('Result: '):
+              raw = raw[len('Result: '):]
+          if not raw or raw == 'null':
+              print('  total_sessions=0')
+              sys.exit(1)
+          try:
+              data = json.loads(raw)
+              if isinstance(data, str):
+                  data = json.loads(data)
+          except Exception as e:
+              print(f'  sessions: parse error: {e}')
+              print(f'  raw_prefix: {raw[:200]}')
+              sys.exit(1)
+          sessions = data if isinstance(data, list) else data.get('sessions', [])
+          print(f'  total_sessions={len(sessions)}')
+          target = sys.argv[1]
+          matched = [s.get('dst_addr','') + ':' + str(s.get('dst_port','')) for s in sessions if target in json.dumps(s)]
+          if matched:
+              print(f'  matched: {matched[:5]}')
+              sys.exit(0)
+          dst_sample = [s.get('dst_addr','') + ':' + str(s.get('dst_port','')) for s in sessions[:10]]
+          if dst_sample:
+              print(f'  sample_destinations: {dst_sample}')
+          sys.exit(1)
+          PYSESS
             return $?
           }
 
@@ -533,15 +533,15 @@ PYSESS
             while ((waited <= max_wait)); do
               local status
               status="$(EDAMAME_CLI_BIN="$CLI" TRIGGERS_PATH="$TRIGGERS_DIR" python3 - <<'PYSTAT'
-import os, sys
-sys.path.insert(0, os.environ['TRIGGERS_PATH'])
-from _edamame_cli import cli_rpc
-s = cli_rpc('get_divergence_engine_status')
-age = s.get('model_age_secs') if isinstance(s, dict) else 0
-contrib = s.get('contributor_count') if isinstance(s, dict) else 0
-running = bool(s.get('running')) if isinstance(s, dict) else False
-print(f'{int(age or 0)}|{int(contrib or 0)}|{1 if running else 0}')
-PYSTAT
+          import os, sys
+          sys.path.insert(0, os.environ['TRIGGERS_PATH'])
+          from _edamame_cli import cli_rpc
+          s = cli_rpc('get_divergence_engine_status')
+          age = s.get('model_age_secs') if isinstance(s, dict) else 0
+          contrib = s.get('contributor_count') if isinstance(s, dict) else 0
+          running = bool(s.get('running')) if isinstance(s, dict) else False
+          print(f'{int(age or 0)}|{int(contrib or 0)}|{1 if running else 0}')
+          PYSTAT
               )" || status="0|0|0"
               local age="${status%%|*}"
               local rest="${status#*|}"
