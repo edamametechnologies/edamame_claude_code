@@ -81,17 +81,6 @@ async function safeStat(filePath) {
   }
 }
 
-const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isLikelyTranscriptFile(fileName) {
-  const stem = fileName.endsWith(".jsonl")
-    ? fileName.slice(0, -".jsonl".length)
-    : fileName.endsWith(".txt")
-      ? fileName.slice(0, -".txt".length)
-      : fileName;
-  return SESSION_ID_PATTERN.test(stem);
-}
-
 async function walkFiles(rootDir, results = []) {
   let entries = [];
   try {
