@@ -199,6 +199,10 @@ export const TOOL_DEFINITIONS = [
           type: "string",
           description: "Local EDAMAME MCP endpoint, typically http://127.0.0.1:3000/mcp.",
         },
+        client_name: {
+          type: "string",
+          description: "Display name shown in the app approval dialog.",
+        },
       },
     },
   },

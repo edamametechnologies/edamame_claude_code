@@ -58,7 +58,7 @@ export async function runHealthcheck(config, options = {}) {
   addCheck("psk.file", hasPsk, config.edamameMcpPskFile);
 
   if (!hasPsk) {
-    result.ok = true;
+    result.ok = !options.strict;
     result.message = "awaiting_pairing";
     return result;
   }

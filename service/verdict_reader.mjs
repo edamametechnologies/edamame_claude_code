@@ -35,7 +35,9 @@ export async function readLatestVerdict(config) {
     history: snapshot.history,
     engineStatus: snapshot.engineStatus,
     changed: previousState.lastVerdictKey !== verdictKey,
-    alertable: snapshot.verdictLabel === "DIVERGENCE",
+    alertable: typeof snapshot.verdict?.alertable === "boolean"
+      ? snapshot.verdict.alertable
+      : snapshot.verdictLabel === "DIVERGENCE",
   };
 
   await saveState(config, "verdict-reader", {

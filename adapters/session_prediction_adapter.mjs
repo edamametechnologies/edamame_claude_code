@@ -81,6 +81,17 @@ async function safeStat(filePath) {
   }
 }
 
+const SESSION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isLikelyTranscriptFile(fileName) {
+  const stem = fileName.endsWith(".jsonl")
+    ? fileName.slice(0, -".jsonl".length)
+    : fileName.endsWith(".txt")
+      ? fileName.slice(0, -".txt".length)
+      : fileName;
+  return SESSION_ID_PATTERN.test(stem);
+}
+
 async function walkFiles(rootDir, results = []) {
   let entries = [];
   try {
@@ -96,7 +107,7 @@ async function walkFiles(rootDir, results = []) {
       await walkFiles(fullPath, results);
       continue;
     }
-    if (entry.name.endsWith(".jsonl") || entry.name.endsWith(".txt")) {
+    if ((entry.name.endsWith(".jsonl") || entry.name.endsWith(".txt")) && isLikelyTranscriptFile(entry.name)) {
       results.push(fullPath);
     }
   }
@@ -570,6 +581,10 @@ function parseTxtTranscript(rawText) {
     buffer.push(line);
   }
   flush();
+
+  if (rawText.trim() && userSections.length === 0 && assistantSections.length === 0) {
+    console.warn("[edamame] parseTxtTranscript: no role markers (user:/assistant:) found in non-empty transcript; format may have changed");
+  }
 
   return {
     userText: userSections.join("\n\n").trim(),

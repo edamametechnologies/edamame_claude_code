@@ -848,8 +848,7 @@ export async function requestAppPairing(config, args = {}) {
   const pairUrl = `${baseUrl}/mcp/pair`;
 
   const body = {
-    // Keep the app-facing client label canonical even if the host passes extra tool arguments.
-    client_name: APP_PAIRING_CLIENT_NAME,
+    client_name: String(args.client_name || config.clientName || APP_PAIRING_CLIENT_NAME).trim(),
     agent_type: String(config.agentType || "claude_code"),
     agent_instance_id: String(config.agentInstanceId || "unknown"),
     requested_endpoint: endpoint,
