@@ -535,9 +535,9 @@ jobs:
           wait_for_divergence_model_ready() {
             local waited=0
             local max_wait=$((DIVERGENCE_MODEL_MIN_AGE_SECS + 60))
-            while ((waited <= max_wait)); do
-              local status
-              status="$(EDAMAME_CLI_BIN="$CLI" TRIGGERS_PATH="$TRIGGERS_DIR" python3 - <<'PYSTAT'
+            local _pystat
+            _pystat="$(mktemp)"
+            cat > "$_pystat" <<'PYSTAT'
           import os, sys
           sys.path.insert(0, os.environ['TRIGGERS_PATH'])
           from _edamame_cli import cli_rpc
@@ -547,18 +547,22 @@ jobs:
           running = bool(s.get('running')) if isinstance(s, dict) else False
           print(f'{int(age or 0)}|{int(contrib or 0)}|{1 if running else 0}')
           PYSTAT
-              )" || status="0|0|0"
+            while ((waited <= max_wait)); do
+              local status
+              status="$(EDAMAME_CLI_BIN="$CLI" TRIGGERS_PATH="$TRIGGERS_DIR" python3 "$_pystat" 2>/dev/null)" || status="0|0|0"
               local age="${status%%|*}"
               local rest="${status#*|}"
               local contrib="${rest%%|*}"
               local running="${rest#*|}"
               if [[ "$running" -eq 1 && "$contrib" -gt 0 && "$age" -ge "$DIVERGENCE_MODEL_MIN_AGE_SECS" ]]; then
+                rm -f "$_pystat"
                 return 0
               fi
               echo "  divergence model warming: running=$running contributors=$contrib age=${age}s"
               sleep 5
               waited=$((waited + 5))
             done
+            rm -f "$_pystat"
             return 1
           }
 
