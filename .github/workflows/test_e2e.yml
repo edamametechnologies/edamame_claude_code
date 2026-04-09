@@ -426,7 +426,9 @@ jobs:
 
           check_sessions() {
             local target_desc="$1"
-            "$CLI" rpc get_current_sessions 2>/dev/null | python3 - "$target_desc" <<'PYSESS'
+            local _pysess
+            _pysess="$(mktemp)"
+            cat > "$_pysess" <<'PYSESS'
           import json, sys
           raw = sys.stdin.read().strip()
           if raw.startswith('Result: '):
@@ -454,7 +456,10 @@ jobs:
               print(f'  sample_destinations: {dst_sample}')
           sys.exit(1)
           PYSESS
-            return $?
+            "$CLI" rpc get_current_sessions 2>/dev/null | python3 "$_pysess" "$target_desc" 2>&1
+            local _rc=$?
+            rm -f "$_pysess"
+            return $_rc
           }
 
           ensure_divergence_harness_ready() {
