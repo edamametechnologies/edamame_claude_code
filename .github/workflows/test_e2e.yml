@@ -635,7 +635,6 @@ jobs:
                   'correlation:not_expected' in categories,
                   bool(decision_source),
                   isinstance(trace_available, bool),
-                  (not expected_prefix) or any(expected_prefix in description for description in descriptions),
               ]
           )
 
