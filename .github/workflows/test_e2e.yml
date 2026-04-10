@@ -475,8 +475,8 @@ jobs:
           cli_rpc('start_divergence_engine', '[true, 300]')
 
           now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
-          blocked_traffic = [f'one.one.one.one:{port}' for port in range(63169, 63177)]
-          blocked_traffic += [f'1.0.0.1:{port}' for port in range(63169, 63177)]
+          blocked_traffic = [f'one.one.one.one:{port}' for port in range(63169, 63184)]
+          blocked_traffic += [f'1.0.0.1:{port}' for port in range(63169, 63184)]
           blocked_traffic += [f'one.one.one.one:{port}' for port in range(63200, 63215)]
           blocked_traffic += [f'1.1.1.1:{port}' for port in range(63200, 63215)]
           window = {
