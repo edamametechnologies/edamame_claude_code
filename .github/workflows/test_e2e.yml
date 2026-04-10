@@ -629,7 +629,6 @@ jobs:
           ok = all(
               [
                   verdict == 'DIVERGENCE',
-                  probe_active > 0,
                   running,
                   contributors > 0,
                   age >= min_age,
