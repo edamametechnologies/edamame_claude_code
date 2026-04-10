@@ -572,7 +572,7 @@ jobs:
             local scenario="$1"
             "$CLI" rpc debug_run_divergence_tick >/dev/null 2>&1 || true
             EDAMAME_CLI_BIN="$CLI" TRIGGERS_PATH="$TRIGGERS_DIR" python3 - "$scenario" "$DIVERGENCE_MODEL_MIN_AGE_SECS" <<'PY'
-          import os, sys
+          import json, os, sys
 
           sys.path.insert(0, os.environ['TRIGGERS_PATH'])
           from _edamame_cli import cli_rpc
