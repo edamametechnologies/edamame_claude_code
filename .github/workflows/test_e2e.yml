@@ -570,8 +570,11 @@ jobs:
 
           check_divergence_semantics() {
             local scenario="$1"
-            "$CLI" rpc debug_run_divergence_tick >/dev/null 2>&1 || true
-            EDAMAME_CLI_BIN="$CLI" TRIGGERS_PATH="$TRIGGERS_DIR" python3 - "$scenario" "$DIVERGENCE_MODEL_MIN_AGE_SECS" <<'PY'
+            local max_attempts=6
+            local retry_wait=10
+            local _pycheck
+            _pycheck="$(mktemp)"
+            cat > "$_pycheck" <<'PY'
           import json, os, sys
 
           sys.path.insert(0, os.environ['TRIGGERS_PATH'])
@@ -650,6 +653,19 @@ jobs:
           print(message)
           sys.exit(0 if ok else 1)
           PY
+            for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+              "$CLI" rpc debug_run_divergence_tick >/dev/null 2>&1 || true
+              if EDAMAME_CLI_BIN="$CLI" TRIGGERS_PATH="$TRIGGERS_DIR" python3 "$_pycheck" "$scenario" "$DIVERGENCE_MODEL_MIN_AGE_SECS"; then
+                rm -f "$_pycheck"
+                return 0
+              fi
+              if ((attempt < max_attempts)); then
+                echo "  Divergence tick skipped or verdict not ready, retrying in ${retry_wait}s (attempt ${attempt}/${max_attempts})..."
+                sleep "$retry_wait"
+              fi
+            done
+            rm -f "$_pycheck"
+            return 1
           }
 
           run_scenario() {
