@@ -54,7 +54,6 @@ jobs:
       - name: Setup EDAMAME Posture
         uses: edamametechnologies/edamame_posture_action@v1
         with:
-          edamame_id: ${{ github.run_id }}
           checkout: true
 
       - name: Set EDAMAME_POSTURE env var
