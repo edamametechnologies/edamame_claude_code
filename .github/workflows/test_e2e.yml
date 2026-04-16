@@ -64,6 +64,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install C compiler (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          pacman -S --noconfirm mingw-w64-x86_64-gcc
+          echo "C:\msys64\mingw64\bin" >> "$GITHUB_PATH"
+          gcc --version
+
       # ── Install edamame_posture (real MCP server) ───────────────
       # PSK pairing mode: install posture CLI, generate PSK, start MCP.
       # App pairing mode (optional): the plugin control center UI handles
