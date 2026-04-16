@@ -51,8 +51,11 @@ jobs:
 
     steps:
 
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Setup EDAMAME Posture
+        uses: edamametechnologies/edamame_posture_action@v1
+        with:
+          edamame_id: ${{ github.run_id }}
+          checkout: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -72,44 +75,6 @@ jobs:
           echo "C:\msys64\mingw64\bin" >> "$GITHUB_PATH"
           /c/msys64/mingw64/bin/gcc.exe --version
           echo "CC=C:\msys64\mingw64\bin\gcc.exe" >> "$GITHUB_ENV"
-
-      # ── Install edamame_posture (real MCP server) ───────────────
-      # PSK pairing mode: install posture CLI, generate PSK, start MCP.
-      # App pairing mode (optional): the plugin control center UI handles
-      # pairing with the EDAMAME desktop app -- not tested in CI.
-
-      - name: Install edamame_posture (Unix)
-        if: runner.os != 'Windows'
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          echo "--- Installing edamame_posture ---"
-          curl --proto '=https' --tlsv1.2 -sSf \
-            https://raw.githubusercontent.com/edamametechnologies/edamame_posture_cli/main/install.sh \
-            | sudo -E sh -s --
-          EP=$(command -v edamame_posture 2>/dev/null || echo /usr/local/bin/edamame_posture)
-          echo "EDAMAME_POSTURE=$EP" >> "$GITHUB_ENV"
-          sudo "$EP" stop 2>/dev/null || true
-          if ! "$EP" --version 2>/dev/null; then
-            echo "WARNING: edamame_posture --version failed (macOS ES entitlement may not be approved on this runner)"
-            echo "Attempting with sudo..."
-            sudo "$EP" --version || echo "WARNING: even sudo --version failed; daemon start may also fail"
-          fi
-
-      - name: Install edamame_posture (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          echo "--- Installing edamame_posture ---"
-          curl --proto '=https' --tlsv1.2 -sSf \
-            https://raw.githubusercontent.com/edamametechnologies/edamame_posture_cli/main/install.sh \
-            | sh -s --
-          EP=$(command -v edamame_posture.exe 2>/dev/null || command -v edamame_posture 2>/dev/null || echo "$HOME/edamame_posture.exe")
-          echo "EDAMAME_POSTURE=$EP" >> "$GITHUB_ENV"
-          "$EP" --version
 
       - name: Generate PSK
         shell: bash
