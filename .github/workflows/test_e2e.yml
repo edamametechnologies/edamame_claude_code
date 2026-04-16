@@ -90,7 +90,12 @@ jobs:
             | sudo -E sh -s --
           EP=$(command -v edamame_posture 2>/dev/null || echo /usr/local/bin/edamame_posture)
           echo "EDAMAME_POSTURE=$EP" >> "$GITHUB_ENV"
-          "$EP" --version
+          sudo "$EP" stop 2>/dev/null || true
+          if ! "$EP" --version 2>/dev/null; then
+            echo "WARNING: edamame_posture --version failed (macOS ES entitlement may not be approved on this runner)"
+            echo "Attempting with sudo..."
+            sudo "$EP" --version || echo "WARNING: even sudo --version failed; daemon start may also fail"
+          fi
 
       - name: Install edamame_posture (Windows)
         if: runner.os == 'Windows'
@@ -128,6 +133,9 @@ jobs:
         env:
           EDAMAME_LLM_API_KEY: ${{ secrets.EDAMAME_LLM_API_KEY }}
         run: |
+          echo "--- Stopping any existing daemon (APT/pkg may auto-start) ---"
+          sudo "$EDAMAME_POSTURE" stop 2>/dev/null || true
+          sleep 2
           echo "--- Starting daemon (disconnected + capture) ---"
           sudo -E "$EDAMAME_POSTURE" background-start-disconnected --packet-capture
           sleep 5
