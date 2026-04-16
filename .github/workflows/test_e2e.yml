@@ -71,6 +71,7 @@ jobs:
           /c/msys64/usr/bin/pacman.exe -S --noconfirm mingw-w64-x86_64-gcc
           echo "C:\msys64\mingw64\bin" >> "$GITHUB_PATH"
           /c/msys64/mingw64/bin/gcc.exe --version
+          echo "CC=C:\msys64\mingw64\bin\gcc.exe" >> "$GITHUB_ENV"
 
       # ── Install edamame_posture (real MCP server) ───────────────
       # PSK pairing mode: install posture CLI, generate PSK, start MCP.
