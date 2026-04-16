@@ -87,7 +87,7 @@ jobs:
           echo "--- Installing edamame_posture ---"
           curl --proto '=https' --tlsv1.2 -sSf \
             https://raw.githubusercontent.com/edamametechnologies/edamame_posture_cli/main/install.sh \
-            | sudo -E sh -s -- --force-binary
+            | sudo -E sh -s --
           EP=$(command -v edamame_posture 2>/dev/null || echo /usr/local/bin/edamame_posture)
           echo "EDAMAME_POSTURE=$EP" >> "$GITHUB_ENV"
           "$EP" --version
@@ -101,7 +101,7 @@ jobs:
           echo "--- Installing edamame_posture ---"
           curl --proto '=https' --tlsv1.2 -sSf \
             https://raw.githubusercontent.com/edamametechnologies/edamame_posture_cli/main/install.sh \
-            | sh -s -- --force-binary
+            | sh -s --
           EP=$(command -v edamame_posture.exe 2>/dev/null || command -v edamame_posture 2>/dev/null || echo "$HOME/edamame_posture.exe")
           echo "EDAMAME_POSTURE=$EP" >> "$GITHUB_ENV"
           "$EP" --version
@@ -362,12 +362,12 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then
             curl --proto '=https' --tlsv1.2 -sSf \
               https://raw.githubusercontent.com/edamametechnologies/edamame_cli/main/install.sh \
-              | sh -s -- --force-binary
+              | sh -s --
             EC=$(command -v edamame_cli.exe 2>/dev/null || command -v edamame_cli 2>/dev/null || echo "$HOME/edamame_cli.exe")
           else
             curl --proto '=https' --tlsv1.2 -sSf \
               https://raw.githubusercontent.com/edamametechnologies/edamame_cli/main/install.sh \
-              | sudo -E sh -s -- --force-binary
+              | sudo -E sh -s --
             EC=$(command -v edamame_cli 2>/dev/null || echo /usr/local/bin/edamame_cli)
           fi
           echo "EDAMAME_CLI=$EC" >> "$GITHUB_ENV"
