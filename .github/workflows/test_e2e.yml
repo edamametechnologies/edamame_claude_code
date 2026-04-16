@@ -109,6 +109,7 @@ jobs:
           sleep 5
           echo "--- Starting MCP server ---"
           sudo "$EDAMAME_POSTURE" mcp-stop 2>/dev/null || true
+          sleep 3
           sudo "$EDAMAME_POSTURE" mcp-start 3000 "$EDAMAME_PSK"
           echo "MCP server started on port 3000"
 
@@ -123,6 +124,7 @@ jobs:
           sleep 8
           echo "--- Starting MCP server ---"
           MSYS_NO_PATHCONV=1 "$EDAMAME_POSTURE" mcp-stop 2>/dev/null || true
+          sleep 3
           MSYS_NO_PATHCONV=1 "$EDAMAME_POSTURE" mcp-start 3000 "$EDAMAME_PSK"
           echo "MCP server started on port 3000"
 
