@@ -108,6 +108,7 @@ jobs:
           sudo -E "$EDAMAME_POSTURE" background-start-disconnected --packet-capture
           sleep 5
           echo "--- Starting MCP server ---"
+          sudo "$EDAMAME_POSTURE" mcp-stop 2>/dev/null || true
           sudo "$EDAMAME_POSTURE" mcp-start 3000 "$EDAMAME_PSK"
           echo "MCP server started on port 3000"
 
@@ -121,6 +122,7 @@ jobs:
           "$EDAMAME_POSTURE" background-start-disconnected --packet-capture
           sleep 8
           echo "--- Starting MCP server ---"
+          MSYS_NO_PATHCONV=1 "$EDAMAME_POSTURE" mcp-stop 2>/dev/null || true
           MSYS_NO_PATHCONV=1 "$EDAMAME_POSTURE" mcp-start 3000 "$EDAMAME_PSK"
           echo "MCP server started on port 3000"
 
