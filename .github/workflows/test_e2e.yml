@@ -57,6 +57,10 @@ jobs:
           edamame_id: ${{ github.run_id }}
           checkout: true
 
+      - name: Set EDAMAME_POSTURE env var
+        shell: bash
+        run: echo "EDAMAME_POSTURE=$EDAMAME_BINARY_PATH" >> "$GITHUB_ENV"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
