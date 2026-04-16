@@ -68,9 +68,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          pacman -S --noconfirm mingw-w64-x86_64-gcc
+          /c/msys64/usr/bin/pacman.exe -S --noconfirm mingw-w64-x86_64-gcc
           echo "C:\msys64\mingw64\bin" >> "$GITHUB_PATH"
-          gcc --version
+          /c/msys64/mingw64/bin/gcc.exe --version
 
       # ── Install edamame_posture (real MCP server) ───────────────
       # PSK pairing mode: install posture CLI, generate PSK, start MCP.
