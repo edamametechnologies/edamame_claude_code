@@ -54,7 +54,11 @@ jobs:
       - name: Setup EDAMAME Posture
         uses: edamametechnologies/edamame_posture_action@v1
         with:
+          disconnected_mode: true
+          packet_capture: true
           checkout: true
+        env:
+          EDAMAME_LLM_API_KEY: ${{ secrets.EDAMAME_LLM_API_KEY }}
 
       - name: Set EDAMAME_POSTURE env var
         shell: bash
@@ -79,54 +83,38 @@ jobs:
           /c/msys64/mingw64/bin/gcc.exe --version
           echo "CC=C:\msys64\mingw64\bin\gcc.exe" >> "$GITHUB_ENV"
 
-      - name: Generate PSK
+      - name: Generate PSK and start MCP server
         shell: bash
         run: |
           PSK=$("$EDAMAME_POSTURE" mcp-generate-psk 2>&1 | head -n1) || true
           if [ -z "$PSK" ] || [ ${#PSK} -lt 32 ]; then
-            echo "FAIL: could not generate PSK (got: '$PSK')"
-            echo "Trying with sudo..."
             PSK=$(sudo "$EDAMAME_POSTURE" mcp-generate-psk 2>&1 | head -n1) || true
           fi
           if [ -z "$PSK" ] || [ ${#PSK} -lt 32 ]; then
-            echo "FAIL: could not generate PSK even with sudo (got: '$PSK')"
+            echo "FAIL: could not generate PSK (got: '$PSK')"
             exit 1
           fi
           echo "EDAMAME_PSK=$PSK" >> "$GITHUB_ENV"
           echo "PSK generated (${#PSK} chars)"
 
-      - name: Start daemon + MCP server (Unix)
-        if: runner.os != 'Windows'
-        shell: bash
-        env:
-          EDAMAME_LLM_API_KEY: ${{ secrets.EDAMAME_LLM_API_KEY }}
-        run: |
-          echo "--- Stopping any existing daemon (APT/pkg may auto-start) ---"
-          sudo "$EDAMAME_POSTURE" stop 2>/dev/null || true
-          sleep 2
-          echo "--- Starting daemon (disconnected + capture) ---"
-          sudo -E "$EDAMAME_POSTURE" background-start-disconnected --packet-capture
-          sleep 5
-          echo "--- Starting MCP server ---"
-          sudo "$EDAMAME_POSTURE" mcp-stop 2>/dev/null || true
-          sleep 3
-          sudo "$EDAMAME_POSTURE" mcp-start 3000 "$EDAMAME_PSK"
-          echo "MCP server started on port 3000"
-
-      - name: Start daemon + MCP server (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        env:
-          EDAMAME_LLM_API_KEY: ${{ secrets.EDAMAME_LLM_API_KEY }}
-        run: |
-          echo "--- Starting daemon (disconnected + capture) ---"
-          "$EDAMAME_POSTURE" background-start-disconnected --packet-capture
-          sleep 8
-          echo "--- Starting MCP server ---"
-          MSYS_NO_PATHCONV=1 "$EDAMAME_POSTURE" mcp-stop 2>/dev/null || true
-          sleep 3
-          MSYS_NO_PATHCONV=1 "$EDAMAME_POSTURE" mcp-start 3000 "$EDAMAME_PSK"
-          echo "MCP server started on port 3000"
+          echo "--- Starting MCP server with PSK ---"
+          MCP_CMD="$EDAMAME_POSTURE"
+          if [ "$RUNNER_OS" != "Windows" ]; then
+            MCP_CMD="sudo $EDAMAME_POSTURE"
+          fi
+          for attempt in 1 2 3 4 5; do
+            $MCP_CMD mcp-stop 2>/dev/null || true
+            sleep 3
+            if $MCP_CMD mcp-start 3000 "$PSK" 2>&1; then
+              echo "MCP server started on port 3000"
+              break
+            fi
+            echo "MCP start attempt $attempt/5 failed, retrying..."
+            if [ "$attempt" -eq 5 ]; then
+              echo "FAIL: could not start MCP server after 5 attempts"
+              exit 1
+            fi
+          done
 
       - name: Verify MCP server responds
         shell: bash
