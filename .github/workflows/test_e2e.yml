@@ -491,7 +491,7 @@ jobs:
                       'session_key': 'e2e_divergence_probe_scope',
                       'action': 'Workflow divergence probe scope',
                       'tools_called': ['run'],
-                      'scope_process_paths': ['*/divergence_probe'],
+                      'scope_process_paths': ['*/divergence_probe*'],
                       'scope_parent_paths': [],
                       'scope_grandparent_paths': [],
                       'scope_any_lineage_paths': [],
@@ -499,7 +499,7 @@ jobs:
                       'expected_sensitive_files': [],
                       'expected_lan_devices': [],
                       'expected_local_open_ports': [],
-                      'expected_process_paths': ['*/divergence_probe'],
+                      'expected_process_paths': ['*/divergence_probe*'],
                       'expected_parent_paths': [],
                       'expected_grandparent_paths': [],
                       'expected_open_files': [],
@@ -604,7 +604,8 @@ jobs:
               l7 = session.get('l7') or {}
               process_path = str(l7.get('process_path') or '')
               active = bool((session.get('status') or {}).get('active'))
-              if process_path.endswith('/divergence_probe') and active:
+              basename = process_path.replace('\\', '/').rsplit('/', 1)[-1]
+              if basename in ('divergence_probe', 'divergence_probe.exe') and active:
                   probe_active += 1
 
           verdict = str(summary.get('verdict') or '').strip().upper()
