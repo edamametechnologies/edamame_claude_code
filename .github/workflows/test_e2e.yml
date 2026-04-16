@@ -52,11 +52,12 @@ jobs:
     steps:
 
       - name: Setup EDAMAME Posture
-        uses: edamametechnologies/edamame_posture_action@v1
+        uses: edamametechnologies/edamame_posture_action@main
         with:
           disconnected_mode: true
           packet_capture: true
           checkout: true
+          force_binary: ${{ runner.os == 'Windows' && 'true' || 'false' }}
         env:
           EDAMAME_LLM_API_KEY: ${{ secrets.EDAMAME_LLM_API_KEY }}
 
