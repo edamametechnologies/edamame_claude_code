@@ -449,7 +449,6 @@ jobs:
 
           agent_type = os.environ['AGENT_TYPE']
           agent_instance_id = os.environ['DIVERGENCE_AGENT_INSTANCE_ID']
-          cli_rpc('start_divergence_engine', '[true, 300]')
 
           now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
           blocked_traffic = [f'one.one.one.one:{port}' for port in range(63169, 63184)]
@@ -503,6 +502,7 @@ jobs:
 
           cli_rpc('clear_divergence_state')
           cli_rpc('clear_divergence_history')
+          cli_rpc('start_divergence_engine', '[true, 300]')
           cli_rpc('upsert_behavioral_model', json.dumps({'window_json': json.dumps(window)}))
           status = cli_rpc('get_divergence_engine_status')
           print(json.dumps(status))
