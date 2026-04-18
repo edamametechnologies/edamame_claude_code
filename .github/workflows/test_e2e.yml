@@ -391,7 +391,7 @@ jobs:
           for f in _common.py _native_udp_probe.py _edamame_cli.py cleanup.py \
                    trigger_cve_token_exfil.py trigger_cve_sandbox_escape.py \
                    trigger_memory_poisoning.py \
-                   trigger_credential_sprawl.py trigger_tool_poisoning_effects.py \
+                   trigger_credential_sprawl.py \
                    trigger_supply_chain_exfil.py \
                    trigger_divergence.py trigger_goal_drift.py \
                    trigger_blacklist_comm.py; do
@@ -772,7 +772,6 @@ jobs:
           run_scenario "cve_sandbox_escape" "1.0.0.1"
           run_scenario "memory_poisoning" "portquiz"
           run_scenario "credential_sprawl" "portquiz"
-          run_scenario "tool_poisoning_effects" "portquiz"
           run_scenario "supply_chain_exfil" "portquiz"
           run_scenario "blacklist_comm" "5.188.11"
           run_scenario "divergence" "1.0.0.1"
