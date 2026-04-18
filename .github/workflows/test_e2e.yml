@@ -280,6 +280,29 @@ jobs:
             console.log('Installed version:', pkg.version);
           "
 
+      # ── Verify plugin manifest ───────────────────────────────────
+
+      - name: Verify plugin manifest
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const path = require('path');
+            const manifest = path.join(process.env.INSTALL_ROOT, '.claude-plugin', 'plugin.json');
+            if (!fs.existsSync(manifest)) { console.error('FAIL: ' + manifest + ' not found'); process.exit(1); }
+            const m = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+            for (const key of ['name', 'version']) {
+              if (!m[key]) { console.error('FAIL: missing ' + key + ' in plugin manifest'); process.exit(1); }
+              console.log('  ' + key + ': ' + m[key]);
+            }
+            const pkg = JSON.parse(fs.readFileSync(path.join(process.env.INSTALL_ROOT, 'package.json'), 'utf8'));
+            if (m.version !== pkg.version) {
+              console.error('FAIL: plugin.json version (' + m.version + ') != package.json version (' + pkg.version + ')');
+              process.exit(1);
+            }
+            console.log('Plugin manifest valid');
+          "
+
       # ── Verify global MCP registration ──────────────────────────
 
       - name: Verify global MCP config
@@ -874,7 +897,7 @@ jobs:
               Write-Host "FAIL: edamame-code entry still in MCP config"
               $fail = $true
             } else {
-              Write-Host "  OK: edamame entry removed from MCP config"
+              Write-Host "  OK: edamame-code entry removed from MCP config"
             }
           } else {
             Write-Host "  OK: MCP config file removed or never existed"
