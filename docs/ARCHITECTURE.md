@@ -45,6 +45,8 @@ The [edamame_claude](https://github.com/edamametechnologies/edamame_claude) repo
 6. The divergence engine correlates the model against live system telemetry.
 7. Verdicts are available via `get_divergence_verdict`.
 
+> **External transcript observer (additive, no change in this repo).** Starting with `edamame_core` 1.2.3, EDAMAME also runs its own EDAMAME-side observer that reads `~/.claude/projects/` directly and feeds the same `upsert_behavioral_model_from_raw_sessions` pipeline. The Node-side bridge in this repo keeps working unchanged; the observer is purely additive and hash-skips when its payload matches the last push from this bridge. Operators can pause / resume / run-now per agent from the EDAMAME app's AI / Config tab. When the observer is paused while Claude Code is installed, EDAMAME's `unsecured_claude_code` internal threat trips on the next score cycle.
+
 ## Plugin Distribution
 
 The plugin uses Claude Code's native distribution system:

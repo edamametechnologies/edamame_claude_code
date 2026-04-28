@@ -364,6 +364,65 @@ jobs:
           echo "EDAMAME_CLI=$EC" >> "$GITHUB_ENV"
           "$EC" --version
 
+      # ── External transcript observer probe ─────────────────────
+      # Confirms the new observer RPCs (get_transcript_observer_status,
+      # set_transcript_observer_enabled, run_transcript_observer_tick_for)
+      # are wired up. The step is non-fatal so older edamame_posture
+      # releases that predate the observer keep CI green.
+
+      - name: Verify transcript observer integration
+        timeout-minutes: 3
+        shell: bash
+        env:
+          EDAMAME_CLI: ${{ env.EDAMAME_CLI }}
+          OBSERVER_AGENT_TYPE: claude_code
+        run: |
+          echo "--- Probing transcript observer RPC surface for $OBSERVER_AGENT_TYPE ---"
+          STATUS_RAW="$("$EDAMAME_CLI" rpc get_transcript_observer_status 2>&1 || true)"
+          if echo "$STATUS_RAW" | grep -qiE "unknown.*method|method.*not found|unimplemented"; then
+            echo "INFO: get_transcript_observer_status not present on this posture build; skipping observer probe"
+            exit 0
+          fi
+          echo "$STATUS_RAW" | head -c 800
+          echo ""
+          if echo "$STATUS_RAW" | grep -q "\"agent_type\":\"$OBSERVER_AGENT_TYPE\""; then
+            echo "OK: $OBSERVER_AGENT_TYPE row present in observer status"
+          else
+            echo "WARN: $OBSERVER_AGENT_TYPE row not in observer status (registry propagation delay?)"
+          fi
+
+          echo "--- Toggling observer pause/resume for $OBSERVER_AGENT_TYPE ---"
+          "$EDAMAME_CLI" rpc set_transcript_observer_enabled \
+            "{\"agent_type\":\"$OBSERVER_AGENT_TYPE\",\"enabled\":false}" 2>&1 | head -c 400 \
+            || echo "WARN: set_transcript_observer_enabled disable probe failed (non-fatal)"
+          echo ""
+          "$EDAMAME_CLI" rpc set_transcript_observer_enabled \
+            "{\"agent_type\":\"$OBSERVER_AGENT_TYPE\",\"enabled\":true}" 2>&1 | head -c 400 \
+            || echo "WARN: set_transcript_observer_enabled enable probe failed (non-fatal)"
+          echo ""
+
+          echo "--- Forcing observer tick for $OBSERVER_AGENT_TYPE ---"
+          "$EDAMAME_CLI" rpc run_transcript_observer_tick_for \
+            "{\"agent_type\":\"$OBSERVER_AGENT_TYPE\"}" 2>&1 | head -c 800 \
+            || echo "WARN: run_transcript_observer_tick_for probe failed (non-fatal)"
+          echo ""
+
+          echo "--- Verifying split healthcheck shape (mcp_tools + observer) ---"
+          HEALTH_RAW="$("$EDAMAME_CLI" rpc get_agent_plugin_health \
+            "{\"agent_type\":\"$OBSERVER_AGENT_TYPE\"}" 2>&1 || true)"
+          if echo "$HEALTH_RAW" | grep -qiE "unknown.*method|method.*not found"; then
+            echo "INFO: get_agent_plugin_health not present on this posture build; skipping split-healthcheck probe"
+          else
+            echo "$HEALTH_RAW" | head -c 800
+            echo ""
+            if echo "$HEALTH_RAW" | grep -q '"mcp_tools"' && echo "$HEALTH_RAW" | grep -q '"observer"'; then
+              echo "OK: split healthcheck contains mcp_tools and observer sections"
+            else
+              echo "WARN: split healthcheck missing one of mcp_tools / observer (non-fatal)"
+            fi
+          fi
+          echo "--- Observer probe complete ---"
+
       - name: Run intent E2E
         timeout-minutes: 10
         shell: bash
@@ -376,31 +435,39 @@ jobs:
         run: |
           bash tests/e2e_inject_intent.sh
 
-      # ── CVE / Detection E2E ──────────────────────────────────────
-      # Downloads trigger scripts from agent_security (public) and runs
-      # a subset of CVE scenarios against the live posture daemon.
-      # Verifies that edamame_posture detects the simulated attacks by
-      # checking for sessions to the trigger destinations.
+      # ── Divergence verdict E2E ──────────────────────────────────
+      # Downloads only the divergence + goal_drift trigger scripts from
+      # agent_security and verifies that the divergence engine produces
+      # the right verdict semantics against the model just pushed by
+      # this plugin's intent E2E. The wider CVE detection matrix
+      # (token_exfil, sandbox_escape, memory_poisoning, credential_sprawl,
+      # supply_chain_exfil, blacklist_comm, npm_rat_beacon, file_events)
+      # plus the false-positive baseline is owned by edamame_posture's
+      # security CI -- see tests/security/run_cve_detection.sh and the
+      # release gate in tests/security/check_gate.py.
 
-      - name: Download CVE trigger scripts
+      - name: Download divergence trigger scripts
         shell: bash
         run: |
           TRIGGERS_DIR="${RUNNER_TEMP:-/tmp}/cve_triggers"
           mkdir -p "$TRIGGERS_DIR"
           BASE_URL="https://raw.githubusercontent.com/edamametechnologies/agent_security/main/tests/e2e/triggers"
+          # Plugin CI only exercises the two scenarios that require a
+          # plugin-pushed behavioral model. The full vulnerability detector
+          # CVE matrix (token_exfil, sandbox_escape, memory_poisoning,
+          # credential_sprawl, supply_chain_exfil, blacklist_comm,
+          # npm_rat_beacon, file_events) plus the false-positive baseline
+          # is owned by edamame_posture's security CI -- see
+          # edamame_posture/tests/security/run_cve_detection.sh and the
+          # release gate in tests/security/check_gate.py.
           for f in _common.py _native_udp_probe.py _edamame_cli.py cleanup.py \
-                   trigger_cve_token_exfil.py trigger_cve_sandbox_escape.py \
-                   trigger_memory_poisoning.py \
-                   trigger_credential_sprawl.py \
-                   trigger_supply_chain_exfil.py \
-                   trigger_divergence.py trigger_goal_drift.py \
-                   trigger_blacklist_comm.py; do
+                   trigger_divergence.py trigger_goal_drift.py; do
             curl -sfL "$BASE_URL/$f" -o "$TRIGGERS_DIR/$f" || echo "WARN: failed to download $f"
           done
           echo "CVE_TRIGGERS_DIR=$TRIGGERS_DIR" >> "$GITHUB_ENV"
           ls -la "$TRIGGERS_DIR"
 
-      - name: Run CVE detection scenarios
+      - name: Run divergence verdict scenarios
         timeout-minutes: 15
         shell: bash
         env:
@@ -756,9 +823,11 @@ jobs:
             sleep "$COOLDOWN"
           }
 
-          echo "=== CVE Detection E2E Suite ==="
+          echo "=== Divergence Verdict E2E Suite ==="
           echo "Agent type: $AGENT_TYPE"
           echo "Trigger duration: ${TRIGGER_DURATION}s"
+          echo "(Pure CVE detection scenarios run in edamame_posture's"
+          echo " security CI -- see run_cve_detection.sh + check_gate.py)"
           echo ""
 
           echo "--- Starting packet capture ---"
@@ -768,18 +837,19 @@ jobs:
           "$CLI" rpc get_capture_status 2>/dev/null | head -c 500 || echo "get_capture_status unavailable"
           echo ""
 
-          run_scenario "cve_token_exfil" "portquiz"
-          run_scenario "cve_sandbox_escape" "1.0.0.1"
-          run_scenario "memory_poisoning" "portquiz"
-          run_scenario "credential_sprawl" "portquiz"
-          run_scenario "supply_chain_exfil" "portquiz"
-          run_scenario "blacklist_comm" "5.188.11"
-          run_scenario "divergence" "1.0.0.1"
-          run_scenario "goal_drift" "1.1.1.1"
+          # Plugin CI exercises only the two scenarios that require a
+          # plugin-pushed behavioral model (and therefore cannot be
+          # validated by edamame_posture's daemon-only security suite,
+          # which has no model on the daemon). The full vulnerability
+          # detector matrix lives in edamame_posture's security CI -- see
+          # tests/security/run_cve_detection.sh and the release gate in
+          # tests/security/check_gate.py.
+          run_scenario "divergence"  "1.0.0.1"
+          run_scenario "goal_drift"  "1.1.1.1"
 
           echo ""
           echo "=========================================="
-          echo "CVE Suite Summary"
+          echo "Divergence Verdict Suite Summary"
           echo "  PASS: $SCENARIOS_PASS"
           echo "  WARN: $SCENARIOS_FAIL"
           echo "  SKIP: $SCENARIOS_SKIP"
