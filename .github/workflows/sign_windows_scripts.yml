@@ -31,6 +31,20 @@ jobs:
           edamame_pin: ${{ secrets.EDAMAME_POSTURE_PIN }}
           edamame_id: ${{ github.run_id }}
           checkout: true
+          # Permanent self-hosted runner protection. Signing jobs handle
+          # high-value Authenticode key material; the vuln detector
+          # (with agentic LLM adjudication) watches sessions and FIM
+          # events for the entire job, and a final gate step at the
+          # bottom of the job aborts on any non-dismissed finding. See
+          # self_hosted/.cursor/rules/project.mdc.
+          packet_capture: true
+          vulnerability_detection: true
+          vulnerability_detection_interval: "60"
+          agentic_mode: analyze
+          agentic_provider: edamame
+          agentic_interval: 600
+        env:
+          EDAMAME_LLM_API_KEY: ${{ secrets.EDAMAME_LLM_API_KEY }}
 
       - name: Install AzureSignTool
         run: |
@@ -61,6 +75,16 @@ jobs:
           } else {
             Write-Host "No signature changes to commit"
           }
+
+      # Permanent self-hosted runner protection: dump findings and fail
+      # the job if the vulnerability detector observed any non-dismissed
+      # HIGH/CRITICAL finding during the run.
+      - name: EDAMAME Posture vulnerability gate
+        if: always()
+        uses: edamametechnologies/edamame_posture_action@v1
+        with:
+          dump_vulnerability_findings: true
+          exit_on_vulnerability_findings: true
 
       - name: Slack alert on failure
         if: failure()
