@@ -38,7 +38,7 @@ jobs:
           # bottom of the job aborts on any non-dismissed finding. See
           # self_hosted/.cursor/rules/project.mdc.
           packet_capture: true
-          vulnerability_detection: false
+          vulnerability_detection: true
           vulnerability_detection_interval: "60"
           agentic_mode: analyze
           agentic_provider: edamame
@@ -83,7 +83,7 @@ jobs:
         if: always()
         uses: edamametechnologies/edamame_posture_action@v1
         with:
-          dump_vulnerability_findings: false
+          dump_vulnerability_findings: true
           exit_on_vulnerability_findings: true
 
       - name: Slack alert on failure
