@@ -58,11 +58,6 @@ jobs:
           edamame_pin: ${{ secrets.EDAMAME_POSTURE_PIN }}
           edamame_id: ${{ github.run_id }}
           checkout: true
-          # Runtime runner protection. Applies on github-hosted ephemeral
-          # runners too -- supply-chain compromise of a CI dep would
-          # surface as anomalous traffic / sensitive-material egress
-          # during the test job. See workspace.mdc "Self-Hosted Runner
-          # Protection".
           packet_capture: true
           vulnerability_detection: true
           vulnerability_detection_interval: "60"
