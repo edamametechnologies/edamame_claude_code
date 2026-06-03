@@ -103,7 +103,16 @@ export const DEFAULT_CONFIG = Object.freeze({
     // AS16509 AMAZON-02). Many sessions resolve only to raw IPs
     // without reverse DNS, so domain suffix matching against
     // amazonaws.com misses them; ASN matching catches the rest.
+    // The same AWS entries also cover the Bedrock backend
+    // (CLAUDE_CODE_USE_BEDROCK=1 -> bedrock-runtime.<region>.amazonaws.com).
     "asn:AMAZON",
+    // Vertex AI backend (CLAUDE_CODE_USE_VERTEX=1) routes to
+    // <region>-aiplatform.googleapis.com, hosted on Google
+    // (AS15169 GOOGLE, AS396982 GOOGLE-CLOUD-PLATFORM). As with AWS,
+    // many sessions resolve only to raw Google IPs without reverse DNS,
+    // so the ASN entry catches what googleapis.com suffix matching misses.
+    "googleapis.com:443",
+    "asn:GOOGLE",
   ],
   scopeProcessPaths: [],
   scopeParentPaths: [

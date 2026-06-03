@@ -13,6 +13,19 @@ two-plane divergence detection on developer machines.
 3. EDAMAME evaluates behavioral intent against live system telemetry.
 4. Divergence verdicts surface through the control center or health checks.
 
+## Observer vs plugin: what provides the security
+
+EDAMAME's **host-side transcript observer is the security control of
+record** -- it runs divergence detection against Claude Code as soon as
+Claude Code is discovered on disk, with **zero plugin installed**, and a
+compromised agent cannot pause or silence it. This package is a
+**cooperative enhancement**: it adds **off-host coverage** (when Claude
+Code runs where the host observer cannot read its transcripts -- remote
+box, SSH, container, CI, VM) and **turnkey onboarding/UX** (MCP discovery,
+pairing, in-agent posture/verdict views, health checks). It never provides
+-- and can never weaken -- the guarantee. See
+[Observer vs plugin: the value boundary](docs/ARCHITECTURE.md#observer-vs-plugin-the-value-boundary).
+
 ## Prerequisites
 
 - **Node.js 18+**

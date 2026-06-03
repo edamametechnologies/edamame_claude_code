@@ -47,6 +47,37 @@ The [edamame_claude](https://github.com/edamametechnologies/edamame_claude) repo
 
 > **External transcript observer (additive, no change in this repo).** Starting with `edamame_core` 1.2.3, EDAMAME runs its own EDAMAME-side observer that reads `~/.claude/projects/` directly and feeds the same `upsert_behavioral_model_from_raw_sessions` pipeline. The observer is the security primitive: divergence detection works as soon as Claude Code is **discovered** on disk, regardless of whether this Node-side package is installed. When the package **is** installed, its bridge also pushes models in-process and the observer hash-skips on duplicate payloads -- so the two paths are purely additive and this repo's install / MCP / pairing flow is unchanged. Operators can pause / resume / run-now per agent from the EDAMAME app's AI / Config tab. When the observer is paused while Claude Code is discovered on disk, EDAMAME's `unsecured_claude_code` internal threat trips on the next score cycle.
 
+## Observer vs plugin: the value boundary
+
+The two paths above are **not** peers, and conflating them in either
+direction is wrong: this package is neither the security control nor dead
+weight.
+
+| | EDAMAME host-side observer | This package (reasoning plane) |
+|---|---|---|
+| Role | **Security control of record** | **Cooperative enhancement** |
+| Trust model | Observer-independent: runs in the system plane, so a compromised Claude Code cannot pause, blind, or silence it | Cooperative: Claude Code voluntarily declares intent; it can only *add* signal, never *weaken* a verdict |
+| Needs | Claude Code's transcripts readable on the host (Claude Code **discovered** on disk) | Claude Code itself running this MCP bridge |
+| Provides the guarantee? | **Yes** -- divergence detection works with zero plugin installed | **No** -- it adds coverage and convenience only |
+
+The package earns its place in two ways, neither of which is the
+guarantee itself:
+
+- **Off-host coverage.** When Claude Code runs where the host observer
+  cannot read its transcripts -- a remote box, SSH session, container, CI
+  runner, VM, or a different user account -- this in-process bridge is the
+  *only* path that delivers the behavioral model to EDAMAME.
+- **Cooperative onboarding and UX.** MCP-native discovery, pairing, the
+  in-agent read-only posture/verdict surface, health checks, intent
+  export, and security-awareness rules and skills -- the turnkey ramp that
+  gets a workstation monitored and lets the developer see verdicts from
+  inside Claude Code.
+
+Corollary: a security *decision* never moves into the package. Dismissing
+findings, clearing divergence state, or any verdict-mutating capability
+stays operator-only on the EDAMAME side (the MCP observer-independence
+policy). The package observes and onboards; it never adjudicates.
+
 ## Plugin Distribution
 
 The plugin uses Claude Code's native distribution system:
