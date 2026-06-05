@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { sha256 } from "../service/config.mjs";
+import { sha256, readTextFileWithRetry } from "../service/config.mjs";
 
 const SENSITIVE_PATH_PATTERNS = [
   "~/.ssh/*",
@@ -834,7 +834,7 @@ export async function collectTranscriptSessions(config, options = {}) {
     const { sourcePath, sourceFormat } = preferredTranscriptSource(candidate);
     if (!sourcePath) continue;
 
-    const rawText = await fs.readFile(sourcePath, "utf8");
+    const rawText = await readTextFileWithRetry(sourcePath);
     const parsed = sourceFormat === "txt" ? parseTxtTranscript(rawText) : parseJsonlTranscript(rawText);
     const userText = parsed.userText.trim();
     const assistantText = parsed.assistantText.trim();
