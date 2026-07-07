@@ -81,6 +81,7 @@ cp -R "$SOURCE_ROOT/agents" "$INSTALL_ROOT/"
 cp -R "$SOURCE_ROOT/commands" "$INSTALL_ROOT/"
 cp -R "$SOURCE_ROOT/assets" "$INSTALL_ROOT/"
 cp -R "$SOURCE_ROOT/skills" "$INSTALL_ROOT/"
+cp -R "$SOURCE_ROOT/hooks" "$INSTALL_ROOT/"
 cp -R "$SOURCE_ROOT/.claude-plugin" "$INSTALL_ROOT/"
 if [[ -f "$SOURCE_ROOT/.mcp.json" ]]; then
   cp "$SOURCE_ROOT/.mcp.json" "$INSTALL_ROOT/"
@@ -91,6 +92,7 @@ case "$OS_KERNEL" in
   *)
     chmod +x "$INSTALL_ROOT/bridge/"*.mjs
     chmod +x "$INSTALL_ROOT/service/"*.mjs
+    chmod +x "$INSTALL_ROOT/hooks/"*.mjs
     chmod +x "$INSTALL_ROOT/setup/"*.sh
     ;;
 esac
@@ -187,6 +189,83 @@ def inject_mcp_entry(snippet_path, global_config_path):
 
 
 inject_mcp_entry(claude_code_mcp_path, Path.home() / ".claude.json")
+
+
+# A3 pre-execution tool-call firewall: register the PreToolUse hook in the
+# user-global Claude Code settings so it applies across all projects. The
+# marketplace/plugin install path auto-discovers hooks/hooks.json; the
+# script/app/posture install path is not loaded as a plugin, so the hook must
+# be registered here against the absolute installed script path.
+PRE_TOOL_USE_MATCHERS = [
+    "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|NotebookRead|WebFetch",
+    "^mcp__",
+]
+
+
+def _is_edamame_pre_tool_use_group(group):
+    """True when a PreToolUse matcher-group is one WE previously installed."""
+    if not isinstance(group, dict):
+        return False
+    for handler in group.get("hooks", []) or []:
+        if not isinstance(handler, dict):
+            continue
+        args = handler.get("args")
+        if isinstance(args, list) and any(
+            isinstance(a, str) and a.replace("\\", "/").endswith("hooks/pre_tool_use.mjs")
+            for a in args
+        ):
+            return True
+        command = handler.get("command")
+        if isinstance(command, str) and command.replace("\\", "/").endswith("hooks/pre_tool_use.mjs"):
+            return True
+    return False
+
+
+def inject_pre_tool_use_hook(settings_path, hook_script, hook_config):
+    hook_arg = portable_path(hook_script)
+    handler = {
+        "type": "command",
+        "command": "node",
+        "args": [hook_arg, "--config", portable_path(hook_config)],
+    }
+    groups = [{"matcher": matcher, "hooks": [dict(handler)]} for matcher in PRE_TOOL_USE_MATCHERS]
+
+    if settings_path.exists():
+        try:
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, ValueError):
+            print(f"WARNING: {settings_path} contains malformed JSON, skipping PreToolUse hook injection")
+            return
+        if not isinstance(settings, dict):
+            print(f"WARNING: {settings_path} is not a JSON object, skipping PreToolUse hook injection")
+            return
+        import shutil
+
+        shutil.copy2(settings_path, Path(str(settings_path) + ".bak"))
+    else:
+        settings = {}
+
+    hooks = settings.get("hooks")
+    if not isinstance(hooks, dict):
+        hooks = {}
+        settings["hooks"] = hooks
+    existing = hooks.get("PreToolUse")
+    if not isinstance(existing, list):
+        existing = []
+    # Drop any prior EDAMAME PreToolUse groups so reinstall is idempotent and a
+    # changed install path does not leave a stale handler behind.
+    kept = [g for g in existing if not _is_edamame_pre_tool_use_group(g)]
+    hooks["PreToolUse"] = kept + groups
+
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+
+
+inject_pre_tool_use_hook(
+    Path.home() / ".claude" / "settings.json",
+    install_root / "hooks" / "pre_tool_use.mjs",
+    config_path,
+)
 PY
 
 cat <<EOF
@@ -200,6 +279,7 @@ Claude Code MCP snippet:
   $CLAUDE_CODE_MCP_PATH
 
 MCP server registered automatically in ~/.claude.json
+Pre-execution tool-call firewall (PreToolUse hook) registered in ~/.claude/settings.json
 
 Next steps:
 1. Launch Claude Code and run the edamame_claude_code_control_center tool.

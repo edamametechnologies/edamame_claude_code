@@ -151,6 +151,26 @@ export const DEFAULT_CONFIG = Object.freeze({
   ],
   scopeGrandparentPaths: [],
   scopeAnyLineagePaths: [],
+  // A3 pre-execution tool-call firewall (PreToolUse hook live gating).
+  preExecutionEnabled: true,
+  // "open" -> proceed if EDAMAME is unreachable (never brick the workflow);
+  // "closed" -> deny when EDAMAME cannot verify the call.
+  preExecutionFailMode: "open",
+  // Per-request timeout for the evaluate/poll MCP calls (ms).
+  preExecutionTimeoutMs: 3000,
+  // How long the hook will keep polling a held call before giving up (secs);
+  // capped by the server-advertised hold TTL.
+  preExecutionHoldPollBudgetSecs: 25,
+  // Delay between poll attempts for a held call (ms).
+  preExecutionHoldPollIntervalMs: 1500,
+  // What to do when the poll budget runs out with the call still held:
+  // "ask" -> surface to the human in Claude Code; "deny" -> fail closed.
+  preExecutionHoldTimeoutDecision: "ask",
+  // Cross-process dedup window so a duplicate hook install does not double-gate
+  // the same tool call (ms); set 0 to disable dedup.
+  preExecutionDedupTtlMs: 5000,
+  // Extra sensitive-path substrings that escalate a Read to secret_access.
+  preExecutionSensitiveReadPatterns: [],
   debugBridgeLog: false,
   debugBridgeLogFile: path.join(defaultStateDir(), "bridge-debug.log"),
 });
@@ -220,6 +240,19 @@ function toPositiveNumberOrDefault(value, fallback) {
 function toPositiveIntOrDefault(value, fallback) {
   const parsed = Number.parseInt(String(value), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function toNonNegativeIntOrDefault(value, fallback) {
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function toEnumOrDefault(value, allowed, fallback) {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (allowed.includes(normalized)) return normalized;
+  }
+  return fallback;
 }
 
 function normalizeConfig(raw = {}, overrides = {}) {
@@ -319,6 +352,39 @@ function normalizeConfig(raw = {}, overrides = {}) {
     ),
     scopeAnyLineagePaths: uniqueStrings(
       configuredScopeAnyLineagePaths.length > 0 ? configuredScopeAnyLineagePaths : DEFAULT_CONFIG.scopeAnyLineagePaths,
+    ),
+    preExecutionEnabled: toBoolean(
+      firstDefined(merged, "preExecutionEnabled", "pre_execution_enabled"),
+      DEFAULT_CONFIG.preExecutionEnabled,
+    ),
+    preExecutionFailMode: toEnumOrDefault(
+      firstDefined(merged, "preExecutionFailMode", "pre_execution_fail_mode"),
+      ["open", "closed"],
+      DEFAULT_CONFIG.preExecutionFailMode,
+    ),
+    preExecutionTimeoutMs: toPositiveIntOrDefault(
+      firstDefined(merged, "preExecutionTimeoutMs", "pre_execution_timeout_ms"),
+      DEFAULT_CONFIG.preExecutionTimeoutMs,
+    ),
+    preExecutionHoldPollBudgetSecs: toPositiveNumberOrDefault(
+      firstDefined(merged, "preExecutionHoldPollBudgetSecs", "pre_execution_hold_poll_budget_secs"),
+      DEFAULT_CONFIG.preExecutionHoldPollBudgetSecs,
+    ),
+    preExecutionHoldPollIntervalMs: toPositiveIntOrDefault(
+      firstDefined(merged, "preExecutionHoldPollIntervalMs", "pre_execution_hold_poll_interval_ms"),
+      DEFAULT_CONFIG.preExecutionHoldPollIntervalMs,
+    ),
+    preExecutionHoldTimeoutDecision: toEnumOrDefault(
+      firstDefined(merged, "preExecutionHoldTimeoutDecision", "pre_execution_hold_timeout_decision"),
+      ["ask", "deny"],
+      DEFAULT_CONFIG.preExecutionHoldTimeoutDecision,
+    ),
+    preExecutionDedupTtlMs: toNonNegativeIntOrDefault(
+      firstDefined(merged, "preExecutionDedupTtlMs", "pre_execution_dedup_ttl_ms"),
+      DEFAULT_CONFIG.preExecutionDedupTtlMs,
+    ),
+    preExecutionSensitiveReadPatterns: uniqueStrings(
+      toArray(firstDefined(merged, "preExecutionSensitiveReadPatterns", "pre_execution_sensitive_read_patterns")),
     ),
     debugBridgeLog: toBoolean(
       firstDefined(merged, "debugBridgeLog", "debug_bridge_log"),
