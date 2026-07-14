@@ -2,16 +2,21 @@
 
 **Runtime behavioral monitoring for Claude Code on developer workstations.**
 
-This plugin bridges Claude Code transcripts (reasoning plane) to the
-[EDAMAME Security](https://edamame.tech) system-plane observer, enabling
-two-plane divergence detection on developer machines.
+EDAMAME Security monitors Claude Code **automatically**: its host-side observer runs
+two-plane divergence detection against Claude Code the moment its transcripts are
+discovered on disk, with **no plugin required**. This plugin is a cooperative
+enhancement — it adds off-host coverage and turnkey MCP onboarding (see "Observer vs
+plugin" below), and never provides, or can weaken, that guarantee.
 
 ## How It Works
 
 1. Claude Code produces session transcripts while you code.
-2. This plugin parses transcripts and forwards them to EDAMAME via MCP.
+2. EDAMAME's host-side observer reads those transcripts directly (no plugin required)
+   and runs divergence detection. Where the host cannot read them (off-host / remote /
+   container), this plugin forwards them via MCP instead.
 3. EDAMAME evaluates behavioral intent against live system telemetry.
-4. Divergence verdicts surface through the control center or health checks.
+4. Divergence verdicts surface in EDAMAME (and, for convenience, through this plugin's
+   control center or health checks).
 
 ## Observer vs plugin: what provides the security
 

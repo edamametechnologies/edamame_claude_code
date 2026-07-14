@@ -2,6 +2,13 @@
 
 ## Two-Plane Model
 
+EDAMAME's host-side observer reads Claude Code's transcripts directly and is the
+security control of record; divergence detection works with **no plugin installed**
+(see [Observer vs plugin: the value boundary](#observer-vs-plugin-the-value-boundary)).
+The diagram shows this package's *additive* in-process path -- the primary delivery
+channel only when Claude Code runs off-host where the observer cannot read its
+transcripts.
+
 ```
 Claude Code (reasoning plane)        EDAMAME Security (system plane)
    |                                      |
