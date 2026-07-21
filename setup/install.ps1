@@ -134,90 +134,6 @@ try {
     Write-Warning "Could not inject MCP entry: $_"
 }
 
-# --- A3 pre-execution tool-call firewall: register the PreToolUse hook ---
-# The marketplace/plugin path auto-discovers hooks/hooks.json; the script/app
-# install path is not loaded as a plugin, so the hook is registered here in the
-# user-global Claude Code settings against the absolute installed script path.
-$SettingsPath = Join-Path $env:USERPROFILE ".claude\settings.json"
-$HookScript = PortablePath (Join-Path $InstallRoot "hooks\pre_tool_use.mjs")
-$HookConfig = PortablePath $ConfigPath
-$PreToolUseMatchers = @(
-    "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|NotebookRead|WebFetch",
-    "^mcp__"
-)
-
-function New-EdamamePreToolUseGroup($matcher) {
-    return [PSCustomObject]@{
-        matcher = $matcher
-        hooks   = @(
-            [PSCustomObject]@{
-                type    = "command"
-                command = "node"
-                args    = @($HookScript, "--config", $HookConfig)
-            }
-        )
-    }
-}
-
-function Test-EdamamePreToolUseGroup($group) {
-    if (-not $group) { return $false }
-    $handlers = $null
-    try { $handlers = $group.hooks } catch { $handlers = $null }
-    if ($null -eq $handlers) { return $false }
-    foreach ($h in @($handlers)) {
-        $hargs = $null
-        try { $hargs = $h.args } catch { $hargs = $null }
-        if ($hargs) {
-            foreach ($a in @($hargs)) {
-                if (($a -is [string]) -and (($a -replace '\\', '/').EndsWith("hooks/pre_tool_use.mjs"))) { return $true }
-            }
-        }
-        $cmd = $null
-        try { $cmd = $h.command } catch { $cmd = $null }
-        if (($cmd -is [string]) -and (($cmd -replace '\\', '/').EndsWith("hooks/pre_tool_use.mjs"))) { return $true }
-    }
-    return $false
-}
-
-try {
-    if (Test-Path $SettingsPath) {
-        Copy-Item -Force $SettingsPath "$SettingsPath.bak"
-        try {
-            $Settings = Get-Content -Raw $SettingsPath | ConvertFrom-Json
-        } catch {
-            Write-Warning "$SettingsPath contains malformed JSON, skipping PreToolUse hook injection"
-            $Settings = $null
-        }
-    } else {
-        $Settings = [PSCustomObject]@{}
-    }
-    if ($null -ne $Settings) {
-        if (-not $Settings.PSObject.Properties["hooks"]) {
-            $Settings | Add-Member -NotePropertyName "hooks" -NotePropertyValue ([PSCustomObject]@{})
-        }
-        $HooksObj = $Settings.hooks
-        $Existing = @()
-        if ($HooksObj.PSObject.Properties["PreToolUse"]) {
-            $Existing = @($HooksObj.PreToolUse)
-        }
-        # Drop any prior EDAMAME PreToolUse groups so reinstall is idempotent.
-        $Kept = @($Existing | Where-Object { -not (Test-EdamamePreToolUseGroup $_) })
-        $NewGroups = @()
-        foreach ($m in $PreToolUseMatchers) { $NewGroups += (New-EdamamePreToolUseGroup $m) }
-        $Combined = @($Kept + $NewGroups)
-        if ($HooksObj.PSObject.Properties["PreToolUse"]) {
-            $HooksObj.PreToolUse = $Combined
-        } else {
-            $HooksObj | Add-Member -NotePropertyName "PreToolUse" -NotePropertyValue $Combined
-        }
-        $SettingsDir = Split-Path -Parent $SettingsPath
-        if ($SettingsDir -and -not (Test-Path $SettingsDir)) { New-Item -ItemType Directory -Path $SettingsDir -Force | Out-Null }
-        $Settings | ConvertTo-Json -Depth 12 | Set-Content -Path $SettingsPath -Encoding UTF8
-    }
-} catch {
-    Write-Warning "Could not inject PreToolUse hook: $_"
-}
-
 Write-Host @"
 
 Installed EDAMAME for Claude Code to:
@@ -230,7 +146,6 @@ Claude Code MCP snippet:
   $ClaudeCodeMcpPath
 
 MCP server registered automatically in ~\.claude.json
-Pre-execution tool-call firewall (PreToolUse hook) registered in ~\.claude\settings.json
 
 Next steps:
 1. Launch Claude Code and run the edamame_claude_code_control_center tool.
