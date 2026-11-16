@@ -152,14 +152,20 @@ jobs:
 
       - name: Verify plugin loads in Claude Code
         if: runner.os == 'Linux' && env.ANTHROPIC_API_KEY != ''
+        shell: bash
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           echo "--- Verifying plugin MCP tools load in Claude Code ---"
+          # Keep claude's status instead of letting bash -e exit on the
+          # assignment: the output (stdout and stderr) is printed first, so a
+          # refusal or a CLI error shows in the log.
+          rc=0
           TOOLS=$(echo "list all MCP tool names from the edamame plugin, output only the tool names one per line, nothing else" \
-            | claude -p --dangerously-skip-permissions 2>&1)
+            | claude -p --dangerously-skip-permissions 2>&1) || rc=$?
           echo "$TOOLS"
-          echo "$TOOLS" | grep -q "edamame_claude_code_control_center" || { echo "FAIL: control center tool not found"; exit 1; }
+          if [ "$rc" -ne 0 ]; then echo "FAIL: claude -p exited with status $rc"; exit "$rc"; fi
+          grep -q "edamame_claude_code_control_center" <<<"$TOOLS" || { echo "FAIL: control center tool not found"; exit 1; }
           echo "--- Plugin MCP tools verified ---"
 
       - name: Run manual install (Unix)
