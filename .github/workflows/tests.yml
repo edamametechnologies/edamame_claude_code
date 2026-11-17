@@ -151,10 +151,18 @@ jobs:
           "
 
       - name: Verify plugin loads in Claude Code
-        if: runner.os == 'Linux' && env.ANTHROPIC_API_KEY != ''
+        # Claude Code reaches the model through Amazon Bedrock: the org's
+        # Anthropic API account has had no credit since 2026-11-07 ("Credit
+        # balance is too low") and Bedrock was chosen over a top-up, as for
+        # the posture FP lab (same key, region and EU inference profiles).
+        if: runner.os == 'Linux' && env.AWS_BEARER_TOKEN_BEDROCK != ''
         shell: bash
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_USE_BEDROCK: "1"
+          AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+          AWS_REGION: eu-west-1
+          ANTHROPIC_DEFAULT_SONNET_MODEL: eu.anthropic.claude-sonnet-5-5
+          ANTHROPIC_DEFAULT_HAIKU_MODEL: eu.anthropic.claude-haiku-5-5
         run: |
           echo "--- Verifying plugin MCP tools load in Claude Code ---"
           # Keep claude's status instead of letting bash -e exit on the
